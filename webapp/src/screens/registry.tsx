@@ -16,6 +16,9 @@ import { OrderForm } from './orders/OrderForm';
 import { OrderDetail } from './orders/OrderDetail';
 import { DeliverScreen } from './orders/Deliver';
 import { SyncQueueScreen } from '../offline/SyncQueueScreen';
+import { PaymentNew } from './money/PaymentNew';
+import { DebtorsScreen } from './money/Debtors';
+import { PaymentsScreen, CashScreen, ReturnsScreen, ReturnNew, ReconciliationScreen } from './money/MoneyScreens';
 
 function Soon() {
   return (
@@ -46,5 +49,12 @@ export const SCREENS: Record<string, ComponentType<any>> = {
   settings: SettingsScreen,
   users: UsersScreen,
   'sync-queue': SyncQueueScreen,
+  'payment-new': PaymentNew,
+  payments: PaymentsScreen,
+  debtors: DebtorsScreen,
+  cash: CashScreen,
+  returns: ReturnsScreen,
+  'return-new': ReturnNew,
+  reconciliation: ReconciliationScreen,
   'not-found': Soon,
 };

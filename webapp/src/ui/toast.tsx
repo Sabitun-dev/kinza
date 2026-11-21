@@ -8,6 +8,7 @@ interface ToastItem {
   text: string;
   tone: 'ok' | 'error' | 'info';
   undo?: () => void;
+  actionLabel?: string;
 }
 
 let items: ToastItem[] = [];
@@ -21,8 +22,8 @@ function remove(id: number) {
 }
 
 /** toast("Saqlandi ✅") · toast.error(msg) · toast("O'chirildi", { undo }) */
-export function toast(text: string, opts: { undo?: () => void; tone?: ToastItem['tone'] } = {}) {
-  const item = { id: seq++, text, tone: opts.tone ?? 'ok', undo: opts.undo };
+export function toast(text: string, opts: { undo?: () => void; actionLabel?: string; tone?: ToastItem['tone'] } = {}) {
+  const item = { id: seq++, text, tone: opts.tone ?? 'ok', undo: opts.undo, actionLabel: opts.actionLabel };
   if (item.tone === 'ok') haptic.success();
   if (item.tone === 'error') haptic.error();
   items = [...items.slice(-2), item];
@@ -59,7 +60,7 @@ export function Toaster() {
                 remove(i.id);
               }}
             >
-              {t('common.undo')}
+              {i.actionLabel ?? t('common.undo')}
             </button>
           )}
         </div>
