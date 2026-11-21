@@ -63,7 +63,12 @@ export function StockTab() {
           )}
         </div>
       )}
-      <div className="mt-3">
+      {role !== 'AGENT' && (
+        <button className="mt-2 flex h-11 w-full items-center justify-center gap-2 text-[15px] font-semibold text-brand" onClick={() => nav.push('batches')}>
+          <Icon name="clock" size={18} /> Partiyalar va yaroqlilik muddatlari
+        </button>
+      )}
+      <div className="mt-2">
         <SearchInput value={q} onChange={setQ} placeholder="Ta'm yoki shtrix-kod…" />
       </div>
       <Chips className="mt-3">

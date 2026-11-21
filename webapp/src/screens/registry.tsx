@@ -19,6 +19,8 @@ import { SyncQueueScreen } from '../offline/SyncQueueScreen';
 import { PaymentNew } from './money/PaymentNew';
 import { DebtorsScreen } from './money/Debtors';
 import { PaymentsScreen, CashScreen, ReturnsScreen, ReturnNew, ReconciliationScreen } from './money/MoneyScreens';
+import { SupplierProposal, SupplierOrders, SupplierOrderDetail, SupplierReceive } from './stock/Supplier';
+import { StockCountScreen, StockAdjustScreen, BatchesScreen } from './stock/StockOps';
 
 function Soon() {
   return (
@@ -56,5 +58,12 @@ export const SCREENS: Record<string, ComponentType<any>> = {
   returns: ReturnsScreen,
   'return-new': ReturnNew,
   reconciliation: ReconciliationScreen,
+  'supplier-proposal': SupplierProposal,
+  'supplier-orders': SupplierOrders,
+  'supplier-order': SupplierOrderDetail,
+  'supplier-receive': SupplierReceive,
+  'stock-count': StockCountScreen,
+  'stock-adjust': StockAdjustScreen,
+  batches: BatchesScreen,
   'not-found': Soon,
 };
