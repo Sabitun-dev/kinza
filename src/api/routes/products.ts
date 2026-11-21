@@ -238,8 +238,8 @@ export function productRoutes(app: App) {
   app.post('/api/districts', async (c) => {
     const ctx = c.get('ctx');
     requireRole(ctx.user, 'OWNER');
-    const input = parse(z.object({ name: text(60).min(1), routeDay: z.number().int().min(1).max(7).nullable().optional() }), await body(c));
-    const d = await ctx.db.district.create({ data: { name: input.name, routeDay: input.routeDay ?? null } });
+    const input = parse(z.object({ name: text(60).min(1), routeDay: z.number().int().min(1).max(7).nullable().optional(), weekParity: z.enum(['ODD', 'EVEN']).nullable().optional() }), await body(c));
+    const d = await ctx.db.district.create({ data: { name: input.name, routeDay: input.routeDay ?? null, weekParity: input.weekParity ?? null } });
     return ok(c, { id: d.id });
   });
 
@@ -248,12 +248,12 @@ export function productRoutes(app: App) {
     requireRole(ctx.user, 'OWNER');
     const did = idParam(c);
     const input = parse(
-      z.object({ name: text(60).min(1).optional(), routeDay: z.number().int().min(1).max(7).nullable().optional(), archived: z.boolean().optional() }),
+      z.object({ name: text(60).min(1).optional(), routeDay: z.number().int().min(1).max(7).nullable().optional(), weekParity: z.enum(['ODD', 'EVEN']).nullable().optional(), archived: z.boolean().optional() }),
       await body(c),
     );
     await ctx.db.district.update({
       where: { id: did },
-      data: { name: input.name, routeDay: input.routeDay, archivedAt: input.archived === undefined ? undefined : input.archived ? new Date() : null },
+      data: { name: input.name, routeDay: input.routeDay, weekParity: input.weekParity, archivedAt: input.archived === undefined ? undefined : input.archived ? new Date() : null },
     });
     return ok(c, { ok: true });
   });

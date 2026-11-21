@@ -154,6 +154,7 @@ export const uz = {
     RECONCILIATION: 'Solishtirma dalolatnoma',
     PAYMENT_RECEIPT: "To'lov kvitansiyasi",
     SUPPLIER_ORDER: 'Toshkentga buyurtma',
+    CHECKLIST: "Bugungi ro'yxat",
   },
 
   weekdays: ['', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba', 'Yakshanba'],

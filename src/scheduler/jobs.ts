@@ -9,6 +9,7 @@ import { addDays, daysBetween, localDate, toDbDate, fromDbDate, startOfLocalDay 
 import { formatMoney } from '../shared/money.ts';
 import type { Job } from './run.ts';
 import { claimOnce } from './once.ts';
+import { autoCarryOver, ensureChecklist } from '../checklist/checklist.ts';
 
 type U = { id: number; telegramId: bigint; role: 'OWNER' | 'AGENT' | 'DRIVER'; name: string };
 
@@ -143,4 +144,25 @@ const alerts: Job = {
   },
 };
 
-export const scheduledJobs: Job[] = [morning, alerts, cutoff, evening];
+/** Early morning: today's checklist is created and stored for every owner and agent. */
+const checklists: Job = {
+  name: 'checklists',
+  at: (s) => s.checklistCreateTime,
+  run: async (deps, s, day) => {
+    let n = 0;
+    for (const u of await activeUsers(deps)) {
+      if (u.role === 'DRIVER') continue;
+      if (await ensureChecklist(deps.db, s, u, day)) n++;
+    }
+    return `${n} checklists`;
+  },
+};
+
+/** 23:00: every ⏳ shop moves to the next working day. */
+const carryOver: Job = {
+  name: 'carryover',
+  at: (s) => s.carryOverTime,
+  run: async (deps, s, day) => `${await autoCarryOver(deps.db, s, day)} carried`,
+};
+
+export const scheduledJobs: Job[] = [checklists, morning, alerts, cutoff, evening, carryOver];

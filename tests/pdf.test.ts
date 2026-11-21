@@ -19,7 +19,7 @@ const biz: BizInfo = {
 describe('PDF', () => {
   it('font has every Uzbek and Cyrillic letter we use', () => {
     const font = (fontkit as any).create(loadFonts().regular);
-    for (const ch of "O'g'il G'isht ʻ ʼ Ш Ч Ў Қ Ғ Ҳ ш ч ў қ ғ ҳ so'm №") {
+    for (const ch of "O'g'il G'isht ʻ ʼ Ш Ч Ў Қ Ғ Ҳ ш ч ў қ ғ ҳ so'm № ☐") {
       if (ch === ' ') continue;
       expect(font.hasGlyphForCodePoint(ch.codePointAt(0)), `missing glyph ${ch}`).toBe(true);
     }

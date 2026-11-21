@@ -37,7 +37,7 @@ describe('shops', () => {
     const t = await createTestApp();
     await addShop(t, 'Uzoq', { lat: 41.1, lng: 71.8 });
     await addShop(t, 'Yaqin', { lat: 41.0, lng: 71.67 });
-    await addShop(t, 'GPS yo‘q');
+    await addShop(t, 'GPS yo‘q', { status: 'INACTIVE', lat: null, lng: null });
     const r = await t.owner.get('/api/shops?lat=41.0001&lng=71.6701');
     expect(r.data.shops.map((s: any) => s.name)).toEqual(['Yaqin', 'Uzoq', 'GPS yo‘q']);
     expect(r.data.shops[0].distanceKm).toBeLessThan(0.1);

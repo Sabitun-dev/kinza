@@ -23,6 +23,8 @@ export interface ShopListItem {
   lastOrderAt: string | null;
   distanceKm: number | null;
   agentName: string | null;
+  visitLate?: boolean;
+  missing?: string[];
 }
 
 type Filter = 'all' | 'debt' | 'overdue' | 'LEAD' | 'REGULAR' | 'INACTIVE';
@@ -116,10 +118,12 @@ export function ShopRow({ s, onClick }: { s: ShopListItem; onClick: () => void }
   const sub = [s.distanceKm != null ? `${s.distanceKm < 1 ? Math.round(s.distanceKm * 1000) + ' m' : s.distanceKm.toFixed(1) + ' km'}` : null, s.district?.name ?? s.address, s.lastOrderAt ? `oxirgi: ${ago(s.lastOrderAt)}` : null]
     .filter(Boolean)
     .join(' · ');
+  const red = s.visitLate || (s.missing?.length ?? 0) > 0;
   return (
     <Row
       onClick={onClick}
-      title={s.name}
+      className={red ? 'bg-danger-soft' : undefined}
+      title={red ? <span className="text-danger">{s.name}{s.missing?.length ? ` · ${s.missing.join(', ')} yo'q` : ' · uzoq borilmagan'}</span> : s.name}
       subtitle={sub || t(`shopStatus.${s.status}` as never)}
       right={
         s.balance > 0 ? (

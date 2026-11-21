@@ -27,7 +27,7 @@ export function ShopEdit({ id }: { id?: number }) {
   const districts = useApi<{ districts: any[] }>('/districts');
   const groups = useApi<{ groups: any[] }>('/price-groups');
   const users = useApi<{ users: any[] }>(owner ? '/users' : null);
-  const [f, setF] = useState<Form>({ name: '', phones: [''], status: 'LEAD' });
+  const [f, setF] = useState<Form>({ name: '', phones: [''], status: 'LEAD', frequency: 'WEEKLY', priority: 0 });
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
   const [showMap, setShowMap] = useState(false);
@@ -55,9 +55,11 @@ export function ShopEdit({ id }: { id?: number }) {
     toast(`Joylashuv saqlandi (±${Math.round(p.accuracy)} m)`);
   };
 
+  const missing = f.status === 'INACTIVE' ? [] : [!f.districtId && 'hudud', f.lat == null && 'joylashuv'].filter(Boolean) as string[];
+
   useMainButton({
-    text: t('common.save'),
-    disabled: !f.name?.trim(),
+    text: missing.length ? `Kerak: ${missing.join(', ')}` : t('common.save'),
+    disabled: !f.name?.trim() || missing.length > 0,
     progress: saving,
     onClick: async () => {
       setSaving(true);
@@ -79,6 +81,12 @@ export function ShopEdit({ id }: { id?: number }) {
           bankName: f.bankName || null,
           mfo: f.mfo || null,
           bankAccount: f.bankAccount || null,
+          frequency: f.frequency ?? 'WEEKLY',
+          weekParity: f.frequency === 'BIWEEKLY' ? (f.weekParity ?? null) : null,
+          openFrom: f.openFrom || null,
+          openTo: f.openTo || null,
+          notBefore: f.notBefore || null,
+          priority: f.priority ?? 0,
         };
         if (owner) {
           Object.assign(payload, {
@@ -179,11 +187,46 @@ export function ShopEdit({ id }: { id?: number }) {
           )}
         </Card>
 
-        <Field label="Hudud / marshrut kuni">
+        <Field label="Hudud / hafta kuni *">
           <button className="flex h-[52px] w-full items-center justify-between rounded-[14px] border border-line bg-card px-4 text-left" onClick={() => setSheet('district')}>
             <span className={district ? '' : 'text-muted'}>{district ? `${district.name}${district.routeDay ? ' · ' + WEEKDAYS_UZ[district.routeDay] : ''}` : 'Tanlang'}</span>
             <Icon name="chevronDown" className="text-muted" />
           </button>
+        </Field>
+
+        <Field label="Tashrif *">
+          <div className="flex flex-wrap gap-2">
+            <Chip active={f.frequency !== 'BIWEEKLY'} onClick={() => set('frequency', 'WEEKLY')}>Har hafta</Chip>
+            <Chip active={f.frequency === 'BIWEEKLY'} onClick={() => set('frequency', 'BIWEEKLY')}>2 haftada bir</Chip>
+            {f.frequency === 'BIWEEKLY' && !district?.weekParity && (
+              <>
+                <Chip active={(f.weekParity ?? 'ODD') === 'ODD'} onClick={() => set('weekParity', 'ODD')}>Toq hafta</Chip>
+                <Chip active={f.weekParity === 'EVEN'} onClick={() => set('weekParity', 'EVEN')}>Juft hafta</Chip>
+              </>
+            )}
+          </div>
+        </Field>
+
+        <div className="grid grid-cols-3 gap-2">
+          <Field label="Ochiladi">
+            <TextInput type="time" value={f.openFrom ?? ''} onChange={(e) => set('openFrom', e.target.value)} />
+          </Field>
+          <Field label="Yopiladi">
+            <TextInput type="time" value={f.openTo ?? ''} onChange={(e) => set('openTo', e.target.value)} />
+          </Field>
+          <Field label="Kelmang (gacha)">
+            <TextInput type="time" value={f.notBefore ?? ''} onChange={(e) => set('notBefore', e.target.value)} />
+          </Field>
+        </div>
+
+        <Field label="Muhimligi">
+          <div className="flex flex-wrap gap-2">
+            {['Oddiy', 'Muhim', 'Juda muhim'].map((label, k) => (
+              <Chip key={k} active={(f.priority ?? 0) === k} onClick={() => set('priority', k)}>
+                {label}
+              </Chip>
+            ))}
+          </div>
         </Field>
 
         <Field label="Holati">

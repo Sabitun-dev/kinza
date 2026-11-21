@@ -317,3 +317,32 @@ export async function supplierOrderDocument(d: SupplierOrderData): Promise<Uint8
   if (d.comment) b.text(`${t('common.comment')}: ${d.comment}`, { size: 10 });
   return b.save();
 }
+
+export interface ChecklistDocData {
+  date: string;
+  business: BizInfo;
+  title: string;
+  rows: { no: number; name: string; address: string; phone: string; debt: number; note: string }[];
+  plannedKm?: number | null;
+}
+
+/** "Bugungi ro'yxat": shops in route order with empty tick boxes. */
+export async function checklistDocument(d: ChecklistDocData): Promise<Uint8Array> {
+  const b = await start(d.title, d.business);
+  b.title(d.title, `${formatDate(d.date)} · ${d.rows.length} ta do'kon${d.plannedKm ? ` · ${Math.round(d.plannedKm)} km` : ''}`);
+  b.table(
+    [
+      { title: '✓', width: 0.06, align: 'center' },
+      { title: p('no'), width: 0.06, align: 'center' },
+      { title: "Do'kon", width: 0.26 },
+      { title: p('address'), width: 0.26 },
+      { title: p('phone'), width: 0.17 },
+      { title: 'Qarz', width: 0.19, align: 'right' },
+    ],
+    d.rows.map((r) => ['☐', String(r.no), r.note ? `${r.name}\n${r.note}` : r.name, r.address, r.phone, r.debt > 0 ? formatNumber(r.debt) : '—']),
+    { size: 10 },
+  );
+  const total = d.rows.reduce((s, r) => s + Math.max(0, r.debt), 0);
+  b.totals([{ label: "Yig'iladigan qarz", value: formatMoney(total), bold: true, color: 'brand' }]);
+  return b.save();
+}

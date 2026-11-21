@@ -15,8 +15,22 @@ export async function addProduct(t: T, flavour: string, perPack = 120_000, buy =
   return r.data.id as number;
 }
 
+const defaultArea = new WeakMap<object, number>();
+
+/** Area "A" (Monday) for shops created in tests unless they say otherwise. */
+export async function areaA(t: T) {
+  let id = defaultArea.get(t.db);
+  if (!id) {
+    id = (await t.db.district.create({ data: { name: 'A', routeDay: 1 } })).id;
+    defaultArea.set(t.db, id);
+  }
+  return id;
+}
+
+let pin = 0;
 export async function addShop(t: T, name: string, extra: Record<string, unknown> = {}, as = t.owner) {
-  const r = await as.post('/api/shops', { name, ...extra });
+  pin++;
+  const r = await as.post('/api/shops', { name, districtId: await areaA(t), lat: 41.0 + pin / 1000, lng: 71.66 + pin / 1000, ...extra });
   if (r.status !== 200) throw new Error(JSON.stringify(r.data));
   return r.data.id as number;
 }

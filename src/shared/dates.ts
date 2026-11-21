@@ -92,3 +92,21 @@ export function formatDateHuman(date: string): string {
   const [, m, d] = date.split('-').map(Number);
   return `${d} ${MONTHS_UZ[m]}`;
 }
+
+/** ISO-8601 week number (weeks start on Monday; week 1 contains 4 January). */
+export function isoWeek(date: string): number {
+  const d = new Date(date + 'T00:00:00Z');
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+}
+
+export const weekParityOf = (date: string): 'ODD' | 'EVEN' => (isoWeek(date) % 2 === 1 ? 'ODD' : 'EVEN');
+
+/** The next date (strictly after `date`) on the given weekday (1 = Monday … 7 = Sunday). */
+export function nextWeekday(date: string, wd: number): string {
+  let d = addDays(date, 1);
+  while (weekday(d) !== wd) d = addDays(d, 1);
+  return d;
+}

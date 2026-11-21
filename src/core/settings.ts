@@ -59,6 +59,35 @@ export const DEFAULT_SETTINGS = {
   // Lists
   expenseCategories: [] as string[], // seeded into expense_categories table at first start
 
+  // Van sales: route days and checklist
+  /** Extra days off are in the holidays table; this is the weekly day off. 0 = none */
+  weeklyDayOff: 7,
+  /** Pre-orders are delivered on this weekday by default (5 = Friday). */
+  preorderWeekday: 5,
+  middayReminderTime: '17:00',
+  carryOverTime: '23:00',
+  checklistCreateTime: '06:00',
+
+  // Route optimisation
+  warehouseLat: null as number | null,
+  warehouseLng: null as number | null,
+  homeLat: null as number | null,
+  homeLng: null as number | null,
+  routeEnd: 'warehouse' as 'warehouse' | 'home' | 'last',
+  fuelPer100Km: 8,
+  fuelPrice: 10_500,
+  /** Put carried-over shops and pre-orders early if it adds at most this many km. */
+  priorityDetourKm: 3,
+  defaultStopMinutes: 10,
+
+  // Van stock
+  loadFactor: 1.2,
+
+  // Weekly Tashkent order (replaces the daily cutoff)
+  supplierOrderWeekday: 4,
+  supplierArrivalWeekday: 6,
+  coverWeeks: 1.5,
+
   // Filled by /setup
   botUsername: '',
   appUrl: '',

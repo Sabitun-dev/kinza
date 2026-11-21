@@ -143,6 +143,16 @@ model ProductPrice {
 
 // ───────────── Shops ─────────────
 
+enum VisitFrequency {
+  WEEKLY
+  BIWEEKLY
+}
+
+enum WeekParity {
+  ODD
+  EVEN
+}
+
 enum ShopStatus {
   LEAD
   SAMPLE
@@ -155,6 +165,7 @@ model District {
   id         Int       @id @default(autoincrement())
   name       String
   routeDay   Int? // 1 = Monday … 7 = Sunday
+  weekParity WeekParity? // null = every week; ODD/EVEN = every 2 weeks (ISO week number)
   sortOrder  Int       @default(0)
   archivedAt DateTime?
   createdAt  DateTime  @default(now())
@@ -181,6 +192,12 @@ model Shop {
   creditLimit        Int?
   visitEveryDays     Int?
   noOrderAlertDays   Int?        // null = settings default
+  frequency          VisitFrequency @default(WEEKLY)
+  weekParity         WeekParity? // for BIWEEKLY shops in an every-week area
+  openFrom           String?     // "09:00"
+  openTo             String?     // "21:00"
+  notBefore          String?     // do not arrive before "HH:MM"
+  priority           Int         @default(0)
   status             ShopStatus  @default(LEAD)
   agentId            Int?
   agent              User?       @relation("ShopAgent", fields: [agentId], references: [id])
@@ -202,6 +219,7 @@ model Shop {
   returns            Return[]
   visits             Visit[]
   reminders          Reminder[]
+  checklistItems     ChecklistItem[]
 
   @@index([agentId])
   @@map("shops")
@@ -322,6 +340,7 @@ enum DocKind {
   RECONCILIATION
   PAYMENT_RECEIPT
   SUPPLIER_ORDER
+  CHECKLIST
 }
 
 model Document {
@@ -657,6 +676,7 @@ enum VisitResult {
   THINKING
   REFUSED
   CLOSED
+  NO_ORDER
 }
 
 model Visit {
@@ -667,6 +687,7 @@ model Visit {
   user           User        @relation(fields: [userId], references: [id])
   result         VisitResult
   note           String?
+  reason         String?
   lat            Float?
   lng            Float?
   followUpDate   DateTime?   @db.Date
@@ -779,4 +800,79 @@ model SyncRequest {
   createdAt DateTime @default(now())
 
   @@map("sync_requests")
+}
+
+// ───────────── Daily checklist ─────────────
+
+model Holiday {
+  date      DateTime @id @db.Date
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@map("holidays")
+}
+
+enum ChecklistSource {
+  ROUTE    // due today by area and frequency
+  CARRY    // left over from an earlier day (auto at 23:00 or at Kun yakuni)
+  MOVED    // moved here on purpose ("Boshqa kunga")
+  PREORDER // planned pre-order delivery
+  NEW      // shop added to today's area during the day
+}
+
+enum ChecklistStatus {
+  PENDING   // ⏳ Kutilmoqda
+  SOLD      // ✅ Sotildi
+  DELIVERED // 📦 Yetkazildi (pre-order)
+  NO_ORDER  // 🚫 Buyurtma yo'q
+  CLOSED    // 🔒 Yopiq edi
+  MOVED     // ↪️ Ko'chirildi
+}
+
+/// One person's list of shops for one working day. A stored snapshot, not a filter.
+model Checklist {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  date        DateTime  @db.Date
+  areaIds     Int[]
+  closedAt    DateTime?
+  route       Json?     // optimised route: order, legs, ETA, totals, comparison
+  plannedKm   Float?
+  plannedMin  Int?
+  drivenKm    Float?
+  startedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  items       ChecklistItem[]
+
+  @@unique([userId, date])
+  @@map("checklists")
+}
+
+model ChecklistItem {
+  id          Int             @id @default(autoincrement())
+  checklistId Int
+  checklist   Checklist       @relation(fields: [checklistId], references: [id])
+  shopId      Int
+  shop        Shop            @relation(fields: [shopId], references: [id])
+  source      ChecklistSource
+  status      ChecklistStatus @default(PENDING)
+  reason      String?
+  movedTo     DateTime?       @db.Date
+  autoCarried Boolean         @default(false)
+  carriedOn   Boolean         @default(false) // already copied into a later checklist
+  carryCount  Int             @default(0)     // times in a row this shop was left over
+  orderId     Int?
+  visitId     Int?
+  position    Int?
+  etaMin      Int?
+  legKm       Float?
+  doneAt      DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([checklistId, shopId])
+  @@index([status, movedTo])
+  @@map("checklist_items")
 }

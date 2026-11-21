@@ -22,6 +22,8 @@ import { PaymentsScreen, CashScreen, ReturnsScreen, ReturnNew, ReconciliationScr
 import { SupplierProposal, SupplierOrders, SupplierOrderDetail, SupplierReceive } from './stock/Supplier';
 import { StockCountScreen, StockAdjustScreen, BatchesScreen } from './stock/StockOps';
 import { RemindersScreen } from './more/Reminders';
+import { ChecklistHome } from './today/Checklist';
+import { DayCloseScreen, CoverageScreen, HolidaysScreen } from './today/DayClose';
 import { DashboardScreen, ExpensesScreen, ExpenseEdit, ExportsScreen, CommissionScreen } from './reports/Reports';
 
 function Soon() {
@@ -34,7 +36,13 @@ function Soon() {
 
 /** All screens by name. nav.push('order', { id }) renders SCREENS.order with props { id }. */
 export const SCREENS: Record<string, ComponentType<any>> = {
-  'tab:today': TodayTab,
+  'tab:today': ChecklistHome,
+  'today-summary': TodayTab,
+  'day-close': DayCloseScreen,
+  coverage: CoverageScreen,
+  holidays: HolidaysScreen,
+  sell: OrderForm,
+  drive: Soon,
   'tab:orders': OrdersTab,
   'tab:shops': ShopsTab,
   'tab:stock': StockTab,

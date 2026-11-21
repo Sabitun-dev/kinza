@@ -10,6 +10,7 @@ import { supplierRoutes } from './supplier.ts';
 import { reminderRoutes } from './reminders.ts';
 import { todayRoutes } from './today.ts';
 import { reportRoutes } from './reports.ts';
+import { checklistRoutes } from './checklist.ts';
 
 export function registerRoutes(app: App, deps: Deps) {
   coreRoutes(app, deps);
@@ -22,4 +23,5 @@ export function registerRoutes(app: App, deps: Deps) {
   reminderRoutes(app);
   todayRoutes(app);
   reportRoutes(app);
+  checklistRoutes(app);
 }

@@ -41,8 +41,8 @@ export function PriceGroupsScreen() {
 
 /** Districts with route days (e.g. Dushanba: Chust yo'li). */
 export function DistrictsScreen() {
-  const { data } = useApi<{ districts: { id: number; name: string; routeDay: number | null }[] }>('/districts');
-  const [edit, setEdit] = useState<{ id?: number; name: string; routeDay: number | null } | null>(null);
+  const { data } = useApi<{ districts: { id: number; name: string; routeDay: number | null; weekParity: 'ODD' | 'EVEN' | null }[] }>('/districts');
+  const [edit, setEdit] = useState<{ id?: number; name: string; routeDay: number | null; weekParity?: 'ODD' | 'EVEN' | null } | null>(null);
   return (
     <Page title="Hududlar" subtitle="Marshrut kunlari" right={<IconButton icon="plus" label="Qo'shish" tone="brand" onClick={() => setEdit({ name: '', routeDay: null })} />}>
       {!data ? (
@@ -50,7 +50,7 @@ export function DistrictsScreen() {
       ) : (
         <List>
           {data.districts.map((d) => (
-            <Row key={d.id} title={d.name} subtitle={d.routeDay ? WEEKDAYS_UZ[d.routeDay] : 'Kun belgilanmagan'} onClick={() => setEdit(d)} />
+            <Row key={d.id} title={d.name} subtitle={(d.routeDay ? WEEKDAYS_UZ[d.routeDay] : 'Kun belgilanmagan') + (d.weekParity ? (d.weekParity === 'ODD' ? ' · toq haftalar' : ' · juft haftalar') : ' · har hafta')} onClick={() => setEdit(d)} />
           ))}
         </List>
       )}
@@ -117,9 +117,10 @@ function NameSheet({ title, initial, archived, onClose, onSave }: { title: strin
   );
 }
 
-function DistrictSheet({ value, onClose, onSave, onArchive }: { value: { name: string; routeDay: number | null }; onClose: () => void; onSave: (v: { name: string; routeDay: number | null }) => Promise<void>; onArchive?: () => Promise<void> }) {
+function DistrictSheet({ value, onClose, onSave, onArchive }: { value: { name: string; routeDay: number | null; weekParity?: 'ODD' | 'EVEN' | null }; onClose: () => void; onSave: (v: { name: string; routeDay: number | null; weekParity: 'ODD' | 'EVEN' | null }) => Promise<void>; onArchive?: () => Promise<void> }) {
   const [name, setName] = useState(value.name);
   const [day, setDay] = useState<number | null>(value.routeDay);
+  const [parity, setParity] = useState<'ODD' | 'EVEN' | null>(value.weekParity ?? null);
   const [busy, setBusy] = useState(false);
   return (
     <Sheet
@@ -135,7 +136,7 @@ function DistrictSheet({ value, onClose, onSave, onArchive }: { value: { name: s
             onClick={async () => {
               setBusy(true);
               try {
-                await onSave({ name: name.trim(), routeDay: day });
+                await onSave({ name: name.trim(), routeDay: day, weekParity: parity });
                 toast(t('common.saved'));
                 onClose();
               } catch (e) {
@@ -166,6 +167,13 @@ function DistrictSheet({ value, onClose, onSave, onArchive }: { value: { name: s
                 {WEEKDAYS_UZ[d]}
               </Chip>
             ))}
+          </div>
+        </Field>
+        <Field label="Qaysi haftalarda" hint="A1/A2: 2 haftada bir marta (ISO hafta raqami)">
+          <div className="flex flex-wrap gap-2">
+            <Chip active={parity === null} onClick={() => setParity(null)}>Har hafta</Chip>
+            <Chip active={parity === 'ODD'} onClick={() => setParity('ODD')}>Toq haftalar</Chip>
+            <Chip active={parity === 'EVEN'} onClick={() => setParity('EVEN')}>Juft haftalar</Chip>
           </div>
         </Field>
       </div>

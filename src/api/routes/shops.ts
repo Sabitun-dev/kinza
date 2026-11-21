@@ -1,7 +1,8 @@
 import type { App } from '../app.ts';
 import { body, idParam, ok } from '../app.ts';
 import { assertShopAccess, isOwner, requireRole, shopScope } from '../../core/permissions.ts';
-import { bad, notFound } from '../../core/errors.ts';
+import { AppError, bad, notFound } from '../../core/errors.ts';
+import { addShopIfDueToday, isVisitLate } from '../../checklist/checklist.ts';
 import { audit } from '../../core/audit.ts';
 import { fileUrl } from '../../core/files.ts';
 import { inTx } from '../../core/db.ts';
@@ -9,7 +10,7 @@ import { nextNumber, formatDocNumber } from '../../core/counters.ts';
 import { outstanding, payStatus, reallocateShop, shopBalances } from '../../domain/ledger.ts';
 import { localDate, fromDbDate, toDbDate, localDateTime, addDays } from '../../shared/dates.ts';
 import { defaultCanPrice } from '../../shared/qty.ts';
-import { parse, z, money, id, text, localDate as dateSchema } from '../validate.ts';
+import { parse, z, money, id, text, hhmm, localDate as dateSchema } from '../validate.ts';
 import type { Prisma } from '../../generated/prisma/client.ts';
 
 const shopInput = z.object({
@@ -34,7 +35,20 @@ const shopInput = z.object({
   bankName: text(120).nullable().optional(),
   mfo: text(10).nullable().optional(),
   bankAccount: text(30).nullable().optional(),
+  frequency: z.enum(['WEEKLY', 'BIWEEKLY']).optional(),
+  weekParity: z.enum(['ODD', 'EVEN']).nullable().optional(),
+  openFrom: hhmm.nullable().optional(),
+  openTo: hhmm.nullable().optional(),
+  notBefore: hhmm.nullable().optional(),
+  priority: z.number().int().min(0).max(10).optional(),
 });
+
+/** Every active shop needs an area, a frequency and a map pin, so it can be planned. */
+function requirePlannable(shop: { status?: string | null; districtId?: number | null; lat?: number | null; lng?: number | null; frequency?: string | null }) {
+  if (shop.status === 'INACTIVE') return;
+  const missing = [!shop.districtId && 'hudud', !shop.frequency && 'tashrif chastotasi', (shop.lat == null || shop.lng == null) && 'xaritadagi joylashuv'].filter(Boolean);
+  if (missing.length) throw new AppError(`Saqlab bo'lmaydi: ${missing.join(', ')} kiritilmagan`, 400, 'shop_incomplete', { missing });
+}
 
 /** Fields an agent may not change (business decisions stay with the owner). */
 const OWNER_ONLY_FIELDS = ['priceGroupId', 'paymentDays', 'creditLimit', 'agentId', 'noOrderAlertDays'] as const;
@@ -79,11 +93,13 @@ export function shopRoutes(app: App) {
     });
     const ids = shops.map((s) => s.id);
     const today = localDate(ctx.now());
-    const [balances, lastOrders, myRecent] = await Promise.all([
+    const [balances, lastOrders, myRecent, lastVisits] = await Promise.all([
       shopBalances(ctx.db, today, ids),
       ctx.db.order.groupBy({ by: ['shopId'], where: { shopId: { in: ids }, isOpening: false, status: { not: 'CANCELLED' } }, _max: { createdAt: true } }),
       ctx.db.order.groupBy({ by: ['shopId'], where: { shopId: { in: ids }, agentId: ctx.user.id }, _max: { createdAt: true } }),
+      ctx.db.visit.groupBy({ by: ['shopId'], where: { shopId: { in: ids } }, _max: { visitedAt: true } }),
     ]);
+    const lastVisit = new Map(lastVisits.map((v) => [v.shopId, v._max.visitedAt]));
     const lastOrder = new Map(lastOrders.map((o) => [o.shopId, o._max.createdAt]));
     const recent = new Map(myRecent.map((o) => [o.shopId, o._max.createdAt?.getTime() ?? 0]));
     const hasGps = Number.isFinite(lat) && Number.isFinite(lng) && !!c.req.query('lat');
@@ -108,6 +124,10 @@ export function shopRoutes(app: App) {
         photoUrl: fileUrl(s.photoFileId, 7 * 86400),
         distanceKm: hasGps && s.lat != null && s.lng != null ? Math.round(distanceKm(lat, lng, s.lat, s.lng) * 100) / 100 : null,
         recent: recent.get(s.id) ?? 0,
+        frequency: s.frequency,
+        lastVisitAt: lastVisit.get(s.id) ?? null,
+        visitLate: s.status !== 'INACTIVE' && s.status !== 'LEAD' && isVisitLate(s.frequency, lastVisit.get(s.id), s.createdAt, today),
+        missing: s.status === 'INACTIVE' ? [] : [!s.districtId && 'hudud', s.lat == null && 'joylashuv'].filter(Boolean),
       };
     });
     list.sort((a, b) => {
@@ -201,6 +221,7 @@ export function shopRoutes(app: App) {
     requireRole(ctx.user, 'OWNER', 'AGENT');
     const input = parse(shopInput, await body(c));
     if (!isOwner(ctx.user)) for (const k of OWNER_ONLY_FIELDS) delete (input as Record<string, unknown>)[k];
+    requirePlannable({ ...input, status: input.status ?? 'LEAD', frequency: input.frequency ?? 'WEEKLY' });
     const shop = await ctx.db.shop.create({
       data: {
         ...input,
@@ -211,6 +232,7 @@ export function shopRoutes(app: App) {
       },
     });
     await audit(ctx.db, ctx.user.id, 'shop.create', 'shop', shop.id, undefined, shop);
+    await addShopIfDueToday(ctx.db, ctx.settings, shop.agentId ? { id: shop.agentId, role: 'AGENT' } : ctx.user, shop.id, localDate(ctx.now()));
     return ok(c, { id: shop.id });
   });
 
@@ -222,11 +244,16 @@ export function shopRoutes(app: App) {
     const input = parse(shopInput.partial(), await body(c));
     if (!isOwner(ctx.user)) for (const k of OWNER_ONLY_FIELDS) delete (input as Record<string, unknown>)[k];
     const before = await ctx.db.shop.findUniqueOrThrow({ where: { id: sid } });
+    requirePlannable({ ...before, ...input });
     const after = await ctx.db.shop.update({
       where: { id: sid },
       data: { ...input, phones: input.phones ? input.phones.filter(Boolean) : undefined },
     });
     await audit(ctx.db, ctx.user.id, 'shop.update', 'shop', sid, before, after);
+    if (before.districtId !== after.districtId || before.status !== after.status || before.lat == null) {
+      const owner = after.agentId ? { id: after.agentId, role: 'AGENT' as const } : ctx.user;
+      await addShopIfDueToday(ctx.db, ctx.settings, owner, sid, localDate(ctx.now()));
+    }
     return ok(c, { ok: true });
   });
 

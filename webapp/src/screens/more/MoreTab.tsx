@@ -30,7 +30,8 @@ const GROUPS: { title: string; items: Item[] }[] = [
       { icon: 'chart', label: 'Mening natijalarim', screen: 'my-dashboard', roles: ['AGENT', 'DRIVER'] },
       { icon: 'kanban', label: 'Leadlar', screen: 'leads', roles: ['OWNER', 'AGENT'] },
       { icon: 'pin', label: 'Tashriflar', screen: 'visits', roles: ['OWNER', 'AGENT'] },
-      { icon: 'route', label: 'Bugungi marshrut', screen: 'route', roles: ['OWNER', 'AGENT', 'DRIVER'] },
+      { icon: 'check', label: 'Qamrov (haftalik)', screen: 'coverage', roles: ['OWNER', 'AGENT'] },
+      { icon: 'today', label: 'Bugungi xulosa', screen: 'today-summary', roles: ['OWNER', 'AGENT', 'DRIVER'] },
       { icon: 'bell', label: 'Eslatmalar', screen: 'reminders', roles: ['OWNER', 'AGENT', 'DRIVER'] },
       { icon: 'download', label: 'Eksport (Excel / CSV)', screen: 'exports', roles: ['OWNER'] },
     ],
@@ -40,7 +41,8 @@ const GROUPS: { title: string; items: Item[] }[] = [
     items: [
       { icon: 'stock', label: 'Mahsulotlar', screen: 'products', roles: ['OWNER'] },
       { icon: 'tag', label: 'Narx guruhlari', screen: 'price-groups', roles: ['OWNER'] },
-      { icon: 'route', label: 'Hududlar va marshrut kunlari', screen: 'districts', roles: ['OWNER'] },
+      { icon: 'route', label: 'Hududlar va hafta kunlari', screen: 'districts', roles: ['OWNER'] },
+      { icon: 'calendar', label: 'Dam olish kunlari', screen: 'holidays', roles: ['OWNER'] },
     ],
   },
   {
