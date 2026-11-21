@@ -111,13 +111,14 @@ export async function commissionStatement(ctx: Ctx, userId: number, month: strin
   const start = startOfLocalDay(from);
   const end = startOfLocalDay(next);
   const user = await ctx.db.user.findUniqueOrThrow({ where: { id: userId } });
-  const [orders, payments] = await Promise.all([
+  const [orders, payments, visits] = await Promise.all([
     ctx.db.order.findMany({
       where: { status: 'DELIVERED', isOpening: false, deliveredAt: { gte: start, lt: end }, OR: [{ agentId: userId }, { shop: { agentId: userId } }] },
       include: { shop: { select: { name: true } } },
       orderBy: { deliveredAt: 'asc' },
     }),
     ctx.db.payment.findMany({ where: { voidedAt: null, receivedById: userId, paidAt: { gte: start, lt: end } }, include: { shop: { select: { name: true } } }, orderBy: { paidAt: 'asc' } }),
+    ctx.db.visit.groupBy({ by: ['result'], where: { userId, visitedAt: { gte: start, lt: end } }, _count: true }),
   ]);
   const sales = orders.reduce((s, o) => s + o.total, 0);
   const collected = payments.reduce((s, p) => s + p.amount, 0);
@@ -129,6 +130,8 @@ export async function commissionStatement(ctx: Ctx, userId: number, month: strin
     collected,
     base,
     commission: Math.round((base * user.commissionBp) / 10_000),
+    visits: visits.reduce((n, v) => n + v._count, 0),
+    visitsWithOrder: visits.find((v) => v.result === 'ORDERED')?._count ?? 0,
     orders: orders.map((o) => ({ id: o.id, number: o.number, shop: o.shop.name, date: localDate(o.deliveredAt!), total: o.total })),
     payments: payments.map((p) => ({ id: p.id, shop: p.shop.name, date: localDate(p.paidAt), amount: p.amount })),
   };

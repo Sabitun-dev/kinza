@@ -323,6 +323,8 @@ export function CommissionScreen({ userId }: { userId?: number }) {
           <div className="mt-3 grid grid-cols-2 gap-3">
             <Stat label="Sotuv (yetkazilgan)" value={formatMoney(data.sales)} />
             <Stat label="Yig'ilgan pul" value={formatMoney(data.collected)} />
+            <Stat label="Tashriflar" value={String(data.visits)} sub={`${data.visitsWithOrder} tasida buyurtma`} />
+            <Stat label="Sotuvlar soni" value={String(data.orders.length)} />
           </div>
           <Card className={cx('mt-3', data.user.mode !== 'NONE' && 'bg-brand text-brand-ink')}>
             <div className="text-[14px] opacity-80">Komissiya {data.user.mode === 'NONE' ? 'belgilanmagan' : `(${data.user.bp / 100}% ${data.user.mode === 'COLLECTED' ? "yig'ilgan puldan" : 'sotuvdan'})`}</div>
