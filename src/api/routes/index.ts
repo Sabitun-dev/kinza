@@ -9,6 +9,7 @@ import { paymentRoutes } from './payments.ts';
 import { supplierRoutes } from './supplier.ts';
 import { reminderRoutes } from './reminders.ts';
 import { todayRoutes } from './today.ts';
+import { reportRoutes } from './reports.ts';
 
 export function registerRoutes(app: App, deps: Deps) {
   coreRoutes(app, deps);
@@ -20,4 +21,5 @@ export function registerRoutes(app: App, deps: Deps) {
   supplierRoutes(app);
   reminderRoutes(app);
   todayRoutes(app);
+  reportRoutes(app);
 }

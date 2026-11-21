@@ -22,6 +22,7 @@ import { PaymentsScreen, CashScreen, ReturnsScreen, ReturnNew, ReconciliationScr
 import { SupplierProposal, SupplierOrders, SupplierOrderDetail, SupplierReceive } from './stock/Supplier';
 import { StockCountScreen, StockAdjustScreen, BatchesScreen } from './stock/StockOps';
 import { RemindersScreen } from './more/Reminders';
+import { DashboardScreen, ExpensesScreen, ExpenseEdit, ExportsScreen, CommissionScreen } from './reports/Reports';
 
 function Soon() {
   return (
@@ -67,5 +68,11 @@ export const SCREENS: Record<string, ComponentType<any>> = {
   'stock-adjust': StockAdjustScreen,
   batches: BatchesScreen,
   reminders: RemindersScreen,
+  dashboard: DashboardScreen,
+  expenses: ExpensesScreen,
+  'expense-edit': ExpenseEdit,
+  exports: ExportsScreen,
+  commission: CommissionScreen,
+  'my-dashboard': CommissionScreen,
   'not-found': Soon,
 };
