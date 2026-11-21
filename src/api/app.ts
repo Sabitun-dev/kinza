@@ -39,7 +39,7 @@ export function createApp(deps: Deps): App {
       }
       return c.json({ error: "Ruxsat yo'q. Egasidan taklif havolasini so'rang.", code: 'no_access' }, 403);
     }
-    c.set('ctx', { db: deps.db, user, settings, blobs: deps.blobs, notifier: deps.notifier, now: deps.now });
+    c.set('ctx', { db: deps.db, user, settings, blobs: deps.blobs, notifier: deps.notifier, now: deps.now, http: deps.http });
     return next();
   });
 

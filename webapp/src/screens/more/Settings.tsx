@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Page } from '../../ui/page';
 import { Card, Field, NumberInput, Section, SkeletonList, TextInput, Toggle, Segmented, List } from '../../ui/kit';
 import { PhotoPicker } from '../../ui/photo';
+import { Button } from '../../ui/kit';
+import { getPosition } from '../../util';
 import { api, invalidate, useApi } from '../../api';
 import { useMainButton } from '../../mainButton';
 import { toast } from '../../ui/toast';
@@ -13,7 +15,9 @@ type FieldDef =
   | { key: string; label: string; type: 'number'; suffix?: string; hint?: string }
   | { key: string; label: string; type: 'bool'; hint?: string }
   | { key: string; label: string; type: 'percentBp'; hint?: string }
-  | { key: string; label: string; type: 'choice'; options: { value: string; label: string }[]; hint?: string };
+  | { key: string; label: string; type: 'choice'; options: { value: string; label: string }[]; hint?: string }
+  | { key: string; label: string; type: 'decimal'; suffix?: string; hint?: string }
+  | { key: string; label: string; type: 'pin'; latKey: string; lngKey: string; hint?: string };
 
 const GROUPS: { title: string; fields: FieldDef[] }[] = [
   {
@@ -80,6 +84,39 @@ const GROUPS: { title: string; fields: FieldDef[] }[] = [
       { key: 'lowStockPacks', label: 'Kam qoldiq chegarasi', type: 'number', suffix: 'blok' },
       { key: 'expiryWarnDays', label: 'Muddat tugashidan oldin', type: 'number', suffix: 'kun' },
       { key: 'noOrderAlertDays', label: '"Buyurtma bermadi" ogohlantirishi', type: 'number', suffix: 'kun' },
+    ],
+  },
+  {
+    title: "Marshrut va yoqilg'i",
+    fields: [
+      { key: 'warehouse', label: 'Ombor joylashuvi', type: 'pin', latKey: 'warehouseLat', lngKey: 'warehouseLng', hint: "GPS bo'lmasa marshrut shu yerdan boshlanadi" },
+      { key: 'home', label: 'Uy joylashuvi', type: 'pin', latKey: 'homeLat', lngKey: 'homeLng' },
+      {
+        key: 'routeEnd',
+        label: 'Kun oxirida qaytish',
+        type: 'choice',
+        options: [
+          { value: 'warehouse', label: 'Omborga' },
+          { value: 'home', label: 'Uyga' },
+          { value: 'last', label: "Oxirgi do'konda" },
+        ],
+      },
+      { key: 'fuelPer100Km', label: 'Sarf (100 km ga)', type: 'number', suffix: 'litr' },
+      { key: 'fuelPrice', label: "Yoqilg'i narxi (1 litr)", type: 'number', suffix: "so'm" },
+      { key: 'priorityDetourKm', label: 'Kecha qolganlarni oldinga qo‘yish (ortiqcha yo‘l)', type: 'number', suffix: 'km' },
+      { key: 'defaultStopMinutes', label: "Har do'konda o'rtacha", type: 'number', suffix: 'daqiqa' },
+    ],
+  },
+  {
+    title: 'Hafta tartibi',
+    fields: [
+      { key: 'preorderWeekday', label: 'Oldindan buyurtma yetkaziladigan kun (1=Du … 6=Sha)', type: 'number', suffix: 'kun' },
+      { key: 'supplierOrderWeekday', label: 'Toshkentga buyurtma kuni (4=Payshanba)', type: 'number', suffix: 'kun' },
+      { key: 'supplierArrivalWeekday', label: 'Yuk kelish kuni (6=Shanba)', type: 'number', suffix: 'kun' },
+      { key: 'coverWeeks', label: 'Toshkent buyurtmasi necha haftaga', type: 'decimal', suffix: 'hafta' },
+      { key: 'loadFactor', label: 'Mashinaga yuklash koeffitsienti', type: 'decimal', suffix: '×' },
+      { key: 'middayReminderTime', label: '"Hali qolgan do‘konlar" eslatmasi', type: 'time' },
+      { key: 'carryOverTime', label: "Qolganlarni ertaga o'tkazish vaqti", type: 'time' },
     ],
   },
   {
@@ -165,6 +202,26 @@ export function SettingsScreen() {
                     <NumberInput value={form[f.key] != null ? form[f.key] / 100 : null} suffix="%" onChange={(v) => set(f.key, Math.min(100, v ?? 0) * 100)} />
                   )}
                   {f.type === 'choice' && <Segmented value={form[f.key]} options={f.options} onChange={(v) => set(f.key, v)} />}
+                  {f.type === 'decimal' && (
+                    <TextInput inputMode="decimal" defaultValue={String(form[f.key] ?? '')} onChange={(e) => { const v = parseFloat(e.target.value.replace(',', '.')); if (!Number.isNaN(v) && v > 0) set(f.key, v); }} />
+                  )}
+                  {f.type === 'pin' && (
+                    <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1 text-[14px] text-muted">{form[f.latKey] != null ? `${Number(form[f.latKey]).toFixed(5)}, ${Number(form[f.lngKey]).toFixed(5)}` : "Belgilanmagan"}</div>
+                      <Button
+                        size="sm"
+                        variant="soft"
+                        icon="pin"
+                        onClick={async () => {
+                          const p = await getPosition(10000);
+                          if (!p) return toast.error("Joylashuvni aniqlab bo'lmadi");
+                          setForm((x) => ({ ...x, [f.latKey]: p.lat, [f.lngKey]: p.lng }));
+                        }}
+                      >
+                        Mening joylashuvim
+                      </Button>
+                    </div>
+                  )}
                 </Field>
               ))}
           </div>

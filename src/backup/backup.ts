@@ -45,6 +45,7 @@ export const BACKUP_TABLES: [string, string][] = [
   ['checklist', 'checklists'],
   ['checklistItem', 'checklist_items'],
   ['stockTransfer', 'stock_transfers'],
+  ['gpsPoint', 'gps_points'],
   ['notificationSent', 'notifications_sent'],
   ['auditLog', 'audit_log'],
   ['processedUpdate', 'processed_updates'],

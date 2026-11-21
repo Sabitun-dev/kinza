@@ -20,6 +20,8 @@ export interface Ctx {
   blobs: BlobStore;
   notifier: Notifier;
   now: () => Date;
+  /** HTTP for outside services (OpenRouteService). Tests pass a fake. */
+  http?: typeof fetch;
 }
 
 /** Long-lived dependencies, injected so tests can swap them. */
@@ -30,6 +32,7 @@ export interface Deps {
   botToken: string;
   ownerIds: number[];
   now: () => Date;
+  http?: typeof fetch;
 }
 
 export function parseOwnerIds(env: string | undefined): number[] {

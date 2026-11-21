@@ -169,6 +169,9 @@ function ChecklistScreen() {
 
           {!data.closed && items.length > 0 && (
             <div className="mt-4 grid grid-cols-2 gap-2">
+              <Button variant="soft" size="md" icon="route" className="col-span-2" onClick={() => nav.push('route')}>
+                {data.route ? `Marshrut: ${data.route.totalKm} km · tejaldi ${data.route.savedKm} km` : 'Marshrutni ko‘rish'}
+              </Button>
               <Button variant="secondary" size="md" icon="file" onClick={async () => { await api.post(`/checklist/${data.id}/print`); toast("Ro'yxat chatingizda ✅"); }}>
                 PDF ro'yxat
               </Button>

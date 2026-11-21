@@ -5,6 +5,7 @@ import { notFound } from '../../core/errors.ts';
 import { inTx } from '../../core/db.ts';
 import { closeDay, coverage, ensureChecklist, isDayOff, markNoVisitOutcome, moveItem, nextWorkingDay, shopsWithProblems } from '../../checklist/checklist.ts';
 import { checklistView } from '../../checklist/view.ts';
+import { planRoute } from '../../routing/route.ts';
 import { bizInfo, sendDocumentToChat, storeDocument } from '../../domain/docs.ts';
 import { checklistDocument } from '../../pdf/documents.ts';
 import { addDays, fromDbDate, localDate, toDbDate, weekday } from '../../shared/dates.ts';
@@ -91,6 +92,16 @@ export function checklistRoutes(app: App) {
     const from = c.req.query('from') ?? monday;
     const to = c.req.query('to') ?? today;
     return ok(c, await coverage(ctx.db, ctx.user, from, to, today));
+  });
+
+  /** Optimised route from my position (or the warehouse); also manual order and "Keyinroq qaytaman". */
+  app.post('/api/checklist/:id/route', async (c) => {
+    const ctx = c.get('ctx');
+    const input = parse(
+      z.object({ start: pos, order: z.array(z.number().int()).optional(), fixedCount: z.number().int().min(0).optional(), later: z.number().int().optional() }),
+      await body(c),
+    );
+    return ok(c, await planRoute(ctx, idParam(c), input));
   });
 
   // ── Days off ──

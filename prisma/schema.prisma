@@ -902,3 +902,33 @@ model StockTransfer {
 
   @@map("stock_transfers")
 }
+
+// ───────────── Routing ─────────────
+
+/// Road distance/time between two fixed points ("shop:12", "warehouse", "home"), cached 30 days
+/// so the free OpenRouteService limit is never reached.
+model RoadDistance {
+  fromKey   String
+  toKey     String
+  meters    Int
+  seconds   Int
+  fetchedAt DateTime @default(now())
+
+  @@id([fromKey, toKey])
+  @@map("road_distances")
+}
+
+/// GPS points recorded only while driving mode is open (about one per minute). Kept 30 days.
+model GpsPoint {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  checklistId Int?
+  lat         Float
+  lng         Float
+  accuracy    Float?
+  at          DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([userId, at])
+  @@map("gps_points")
+}
