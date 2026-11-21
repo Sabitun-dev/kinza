@@ -29,6 +29,7 @@ import { SellScreen } from './sell/Sell';
 import { SellPick } from './sell/SellPick';
 import { RoutePlanScreen } from './route/RoutePlan';
 import { DriveScreen } from './route/Drive';
+import { VisitNew, VisitsScreen, LeadsScreen } from './visits/Visits';
 import { DashboardScreen, ExpensesScreen, ExpenseEdit, ExportsScreen, CommissionScreen } from './reports/Reports';
 
 function Soon() {
@@ -49,6 +50,9 @@ export const SCREENS: Record<string, ComponentType<any>> = {
   sell: SellScreen,
   'sell-pick': SellPick,
   route: RoutePlanScreen,
+  'visit-new': VisitNew,
+  visits: VisitsScreen,
+  leads: LeadsScreen,
   drive: DriveScreen,
   car: CarScreen,
   'car-load': CarLoadScreen,

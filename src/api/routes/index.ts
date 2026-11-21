@@ -13,6 +13,7 @@ import { reportRoutes } from './reports.ts';
 import { checklistRoutes } from './checklist.ts';
 import { vanRoutes } from './van.ts';
 import { sellRoutes } from './sell.ts';
+import { visitRoutes } from './visits.ts';
 
 export function registerRoutes(app: App, deps: Deps) {
   coreRoutes(app, deps);
@@ -28,4 +29,5 @@ export function registerRoutes(app: App, deps: Deps) {
   checklistRoutes(app);
   vanRoutes(app);
   sellRoutes(app);
+  visitRoutes(app);
 }
