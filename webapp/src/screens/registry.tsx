@@ -11,6 +11,11 @@ import { ShopDetail } from './shops/ShopDetail';
 import { ShopEdit } from './shops/ShopEdit';
 import { StockTab } from './stock/StockTab';
 import { ProductsScreen, ProductDetail, ProductEdit } from './stock/Products';
+import { OrdersTab } from './orders/OrdersTab';
+import { OrderForm } from './orders/OrderForm';
+import { OrderDetail } from './orders/OrderDetail';
+import { DeliverScreen } from './orders/Deliver';
+import { SyncQueueScreen } from '../offline/SyncQueueScreen';
 
 function Soon() {
   return (
@@ -23,10 +28,14 @@ function Soon() {
 /** All screens by name. nav.push('order', { id }) renders SCREENS.order with props { id }. */
 export const SCREENS: Record<string, ComponentType<any>> = {
   'tab:today': TodayTab,
-  'tab:orders': Soon,
+  'tab:orders': OrdersTab,
   'tab:shops': ShopsTab,
   'tab:stock': StockTab,
   'tab:more': MoreTab,
+  order: OrderDetail,
+  'order-new': OrderForm,
+  'order-edit': OrderForm,
+  deliver: DeliverScreen,
   shop: ShopDetail,
   'shop-edit': ShopEdit,
   products: ProductsScreen,
@@ -36,5 +45,6 @@ export const SCREENS: Record<string, ComponentType<any>> = {
   districts: DistrictsScreen,
   settings: SettingsScreen,
   users: UsersScreen,
+  'sync-queue': SyncQueueScreen,
   'not-found': Soon,
 };
