@@ -1,10 +1,11 @@
 import type { Ctx } from '../core/context.ts';
+import type { DbOrTx } from '../core/db.ts';
 import { inTx } from '../core/db.ts';
 import { audit } from '../core/audit.ts';
 import { bad, forbidden } from '../core/errors.ts';
 import { isOwner } from '../core/permissions.ts';
 import { stockLevels } from './stockLevels.ts';
-import { averageCost, movement, takeFifoOrThrow } from './stock.ts';
+import { averageCost, movement, takeFifoOrThrow, WAREHOUSE, type Place } from './stock.ts';
 import { fromDbDate, localDate, addDays } from '../shared/dates.ts';
 
 export type AdjustType = 'SAMPLE_OUT' | 'DAMAGE' | 'EXPIRED' | 'WRITE_OFF';
@@ -25,7 +26,7 @@ export async function adjustStock(ctx: Ctx, input: { productId: number; type: Ad
     if (pool === 'SELLABLE') {
       const taken = await takeFifoOrThrow(tx, product, input.qtyCans, ctx.settings.costMethod);
       for (const t of taken) {
-        await movement(tx, { productId: product.id, batchId: t.batchId, type: input.type, qtyCans: -t.qtyCans, costPerCan: t.costPerCan, shopId: input.shopId, reason: input.reason, userId: ctx.user.id });
+        await movement(tx, { productId: product.id, batchId: t.batchId, type: input.type, qtyCans: -t.qtyCans, costPerCan: t.costPerCan, place: t.place, carUserId: t.carUserId, shopId: input.shopId, reason: input.reason, userId: ctx.user.id });
       }
       if (input.type === 'DAMAGE' || input.type === 'EXPIRED') {
         await movement(tx, { productId: product.id, type: input.type, pool: 'DAMAGED', qtyCans: input.qtyCans, shopId: input.shopId, reason: input.reason, userId: ctx.user.id });
@@ -49,16 +50,22 @@ export async function adjustStock(ctx: Ctx, input: { productId: number; type: Ad
  * When stock is added (count is higher), the cost is the current average (or costPerPack if given,
  * e.g. for the very first opening stock).
  */
-export async function saveStockCount(ctx: Ctx, input: { note?: string | null; items: { productId: number; countedCans: number; costPerPack?: number | null; expiry?: string | null }[] }) {
-  if (!isOwner(ctx.user)) throw forbidden();
+export async function saveStockCount(
+  ctx: Ctx,
+  input: { note?: string | null; items: { productId: number; countedCans: number; costPerPack?: number | null; expiry?: string | null }[] },
+  where: Place = WAREHOUSE,
+) {
+  if (!isOwner(ctx.user) && !(where.place === 'CAR' && where.carUserId === ctx.user.id)) throw forbidden();
   return inTx(ctx.db, async (tx) => {
     const products = new Map((await tx.product.findMany({ where: { id: { in: input.items.map((i) => i.productId) } } })).map((p) => [p.id, p]));
-    const levels = await stockLevels(tx, [...products.keys()]);
+    const levels = await placeLevels(tx, [...products.keys()], where);
     const count = await tx.stockCount.create({
       data: {
+        place: where.place,
+        carUserId: where.carUserId ?? null,
         note: input.note || null,
         createdById: ctx.user.id,
-        items: { create: input.items.map((i) => ({ productId: i.productId, expectedCans: levels.get(i.productId)!.inStock, countedCans: i.countedCans })) },
+        items: { create: input.items.map((i) => ({ productId: i.productId, expectedCans: levels.get(i.productId) ?? 0, countedCans: i.countedCans })) },
       },
     });
     const diffs: { productId: number; flavour: string; diff: number }[] = [];
@@ -66,26 +73,37 @@ export async function saveStockCount(ctx: Ctx, input: { note?: string | null; it
       const p = products.get(i.productId);
       if (!p) continue;
       if (i.countedCans < 0) throw bad("Miqdor noto'g'ri");
-      const diff = i.countedCans - levels.get(p.id)!.inStock;
+      const diff = i.countedCans - (levels.get(p.id) ?? 0);
       if (diff === 0) continue;
       diffs.push({ productId: p.id, flavour: p.flavour, diff });
-      const reason = input.note ? `Inventarizatsiya: ${input.note}` : 'Inventarizatsiya';
+      const label = where.place === 'CAR' ? 'Mashina sanog‘i' : 'Inventarizatsiya';
+      const reason = input.note ? `${label}: ${input.note}` : label;
       if (diff < 0) {
-        const taken = await takeFifoOrThrow(tx, p, -diff, ctx.settings.costMethod);
+        const taken = await takeFifoOrThrow(tx, p, -diff, ctx.settings.costMethod, [where]);
         for (const t of taken) {
-          await movement(tx, { productId: p.id, batchId: t.batchId, type: 'COUNT_CORRECTION', qtyCans: -t.qtyCans, costPerCan: t.costPerCan, stockCountId: count.id, reason, userId: ctx.user.id });
+          await movement(tx, { productId: p.id, batchId: t.batchId, type: 'COUNT_CORRECTION', qtyCans: -t.qtyCans, costPerCan: t.costPerCan, place: t.place, carUserId: t.carUserId, stockCountId: count.id, reason, userId: ctx.user.id });
         }
       } else {
         const cost = i.costPerPack != null ? i.costPerPack / p.packSize : await averageCost(tx, p.id);
         const batch = await tx.stockBatch.create({
-          data: { productId: p.id, landedCostPerCan: cost, receivedCans: diff, remainingCans: diff, expiry: i.expiry ? new Date(i.expiry + 'T00:00:00Z') : null },
+          data: { productId: p.id, landedCostPerCan: cost, receivedCans: diff, remainingCans: diff, place: where.place, carUserId: where.carUserId ?? null, expiry: i.expiry ? new Date(i.expiry + 'T00:00:00Z') : null },
         });
-        await movement(tx, { productId: p.id, batchId: batch.id, type: 'COUNT_CORRECTION', qtyCans: diff, costPerCan: cost, stockCountId: count.id, reason, userId: ctx.user.id });
+        await movement(tx, { productId: p.id, batchId: batch.id, type: 'COUNT_CORRECTION', qtyCans: diff, costPerCan: cost, place: where.place, carUserId: where.carUserId ?? null, stockCountId: count.id, reason, userId: ctx.user.id });
       }
     }
     await audit(tx, ctx.user.id, 'stock.count', 'stockCount', count.id, undefined, { diffs });
     return { id: count.id, diffs };
   });
+}
+
+/** Sellable cans per product in one place. */
+export async function placeLevels(db: DbOrTx, productIds: number[], where: Place) {
+  const rows = await db.stockBatch.groupBy({
+    by: ['productId'],
+    where: { productId: { in: productIds }, place: where.place, ...(where.place === 'CAR' ? { carUserId: where.carUserId ?? null } : {}) },
+    _sum: { remainingCans: true },
+  });
+  return new Map(rows.map((r) => [r.productId, r._sum.remainingCans ?? 0]));
 }
 
 /** Batches with stock left, with an expiry warning flag. */

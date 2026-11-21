@@ -9,7 +9,7 @@ import type { PayMethod } from '../generated/prisma/enums.ts';
 import { checkAgentOrderDiscount, checkAgentPrice, pricesForShop, type ResolvedPrice } from './pricing.ts';
 import { reallocateShop, shopBalances } from './ledger.ts';
 import { stockLevels } from './stockLevels.ts';
-import { movement, putBack, takeFifoOrThrow } from './stock.ts';
+import { carOf, movement, putBack, takeFifoOrThrow, WAREHOUSE, type Place } from './stock.ts';
 import { bizInfo, notifyOwners, sendDocumentToChat, shopParty, storeDocument, voidDocuments, esc } from './docs.ts';
 import { orderDocument, type DocLine } from '../pdf/documents.ts';
 import { addDays, addWorkingDays, fromDbDate, localDate, toDbDate } from '../shared/dates.ts';
@@ -403,12 +403,12 @@ export interface DeliverInput {
 }
 
 /** Applies stock (FIFO) and cost to every line. Used by delivery and by revisions. */
-async function consumeForItems(tx: Tx, ctx: Ctx, order: { id: number; shopId: number }, revisionNote?: string) {
+export async function consumeForItems(tx: Tx, ctx: Ctx, order: { id: number; shopId: number }, revisionNote?: string, from: Place[] = [carOf(ctx.user.id), WAREHOUSE]) {
   const items = await tx.orderItem.findMany({ where: { orderId: order.id }, include: { product: true } });
   let costTotal = 0;
   for (const it of items) {
     if (it.qtyCans <= 0) continue;
-    const taken = await takeFifoOrThrow(tx, it.product, it.qtyCans, ctx.settings.costMethod);
+    const taken = await takeFifoOrThrow(tx, it.product, it.qtyCans, ctx.settings.costMethod, from);
     let cost = 0;
     for (const tk of taken) {
       cost += tk.qtyCans * tk.costPerCan;
@@ -419,6 +419,8 @@ async function consumeForItems(tx: Tx, ctx: Ctx, order: { id: number; shopId: nu
         type: 'DELIVERY_OUT',
         qtyCans: -tk.qtyCans,
         costPerCan: tk.costPerCan,
+        place: tk.place,
+        carUserId: tk.carUserId,
         orderId: order.id,
         shopId: order.shopId,
         reason: revisionNote,
@@ -564,10 +566,10 @@ export async function reviseOrder(ctx: Ctx, id: number, input: { lines: LineInpu
     const note = `Tuzatish ${revision}: ${input.reason}`;
 
     // 1. Put the old cans back into their batches
-    const oldBatches = await tx.orderItemBatch.findMany({ where: { orderItem: { orderId: id } }, include: { orderItem: true } });
+    const oldBatches = await tx.orderItemBatch.findMany({ where: { orderItem: { orderId: id } }, include: { orderItem: true, batch: true } });
     await putBack(tx, oldBatches);
     for (const b of oldBatches) {
-      await movement(tx, { productId: b.orderItem.productId, batchId: b.batchId, type: 'DELIVERY_OUT', qtyCans: b.qtyCans, costPerCan: b.costPerCan, orderId: id, shopId: order.shopId, reason: note, userId: ctx.user.id });
+      await movement(tx, { productId: b.orderItem.productId, batchId: b.batchId, type: 'DELIVERY_OUT', qtyCans: b.qtyCans, costPerCan: b.costPerCan, place: b.batch.place, carUserId: b.batch.carUserId, orderId: id, shopId: order.shopId, reason: note, userId: ctx.user.id });
     }
     await tx.orderItemBatch.deleteMany({ where: { orderItem: { orderId: id } } });
     await tx.orderItem.deleteMany({ where: { orderId: id } });

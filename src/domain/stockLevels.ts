@@ -2,7 +2,9 @@ import type { DbOrTx } from '../core/db.ts';
 
 export interface StockLevel {
   productId: number;
-  inStock: number; // sellable cans on hand
+  inStock: number; // sellable cans on hand (warehouse + cars)
+  warehouse: number;
+  car: number; // all cars together
   damaged: number;
   reserved: number; // in confirmed / on-the-way orders
   available: number; // inStock − reserved (negative = must be ordered)
@@ -16,7 +18,7 @@ export async function stockLevels(db: DbOrTx, productIds?: number[]): Promise<Ma
   const [batches, damaged, reserved] = await Promise.all([
     db.stockBatch.findMany({
       where: { ...whereProduct, remainingCans: { gt: 0 } },
-      select: { productId: true, remainingCans: true, expiry: true, landedCostPerCan: true },
+      select: { productId: true, remainingCans: true, expiry: true, landedCostPerCan: true, place: true },
     }),
     db.stockMovement.groupBy({ by: ['productId'], where: { ...whereProduct, pool: 'DAMAGED' }, _sum: { qtyCans: true } }),
     db.orderItem.groupBy({
@@ -29,7 +31,7 @@ export async function stockLevels(db: DbOrTx, productIds?: number[]): Promise<Ma
   const get = (id: number) => {
     let l = out.get(id);
     if (!l) {
-      l = { productId: id, inStock: 0, damaged: 0, reserved: 0, available: 0, nearestExpiry: null, stockValue: 0 };
+      l = { productId: id, inStock: 0, warehouse: 0, car: 0, damaged: 0, reserved: 0, available: 0, nearestExpiry: null, stockValue: 0 };
       out.set(id, l);
     }
     return l;
@@ -37,6 +39,8 @@ export async function stockLevels(db: DbOrTx, productIds?: number[]): Promise<Ma
   for (const b of batches) {
     const l = get(b.productId);
     l.inStock += b.remainingCans;
+    if (b.place === 'CAR') l.car += b.remainingCans;
+    else l.warehouse += b.remainingCans;
     l.stockValue += b.remainingCans * b.landedCostPerCan;
     const exp = b.expiry?.toISOString().slice(0, 10) ?? null;
     if (exp && (!l.nearestExpiry || exp < l.nearestExpiry)) l.nearestExpiry = exp;

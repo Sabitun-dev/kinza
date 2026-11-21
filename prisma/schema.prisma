@@ -594,6 +594,8 @@ model StockBatch {
   supplierOrderId  Int?
   supplierOrder    SupplierOrder? @relation(fields: [supplierOrderId], references: [id])
   expiry           DateTime?      @db.Date
+  place            StockPlace     @default(WAREHOUSE)
+  carUserId        Int?
   landedCostPerCan Float
   receivedCans     Int
   remainingCans    Int            // sellable cans left in this batch
@@ -602,11 +604,17 @@ model StockBatch {
   movements        StockMovement[]
   orderItems       OrderItemBatch[]
 
-  @@index([productId, remainingCans])
+  @@index([productId, place, carUserId, remainingCans])
   @@map("stock_batches")
 }
 
+enum StockPlace {
+  WAREHOUSE // Ombor
+  CAR       // Mashina (one per person: carUserId)
+}
+
 enum MovementType {
+  TRANSFER  // Yuklash / Tushirish between warehouse and car
   SUPPLIER_IN
   DELIVERY_OUT
   RETURN_IN
@@ -631,6 +639,9 @@ model StockMovement {
   batch           StockBatch?  @relation(fields: [batchId], references: [id])
   type            MovementType
   pool            StockPool    @default(SELLABLE)
+  place           StockPlace   @default(WAREHOUSE)
+  carUserId       Int?
+  transferId      Int?
   qtyCans         Int          // signed: + in, − out
   costPerCan      Float?
   orderId         Int?
@@ -648,6 +659,8 @@ model StockMovement {
 
 model StockCount {
   id          Int              @id @default(autoincrement())
+  place       StockPlace       @default(WAREHOUSE)
+  carUserId   Int?
   note        String?
   createdById Int
   createdAt   DateTime         @default(now())
@@ -875,4 +888,17 @@ model ChecklistItem {
   @@unique([checklistId, shopId])
   @@index([status, movedTo])
   @@map("checklist_items")
+}
+
+/// "Yuklash" (warehouse → car) or "Tushirish" (car → warehouse).
+model StockTransfer {
+  id          Int      @id @default(autoincrement())
+  toCar       Boolean  // true = load the car, false = unload
+  carUserId   Int
+  createdById Int
+  note        String?
+  lines       Json     // [{ productId, qtyCans }]
+  createdAt   DateTime @default(now())
+
+  @@map("stock_transfers")
 }

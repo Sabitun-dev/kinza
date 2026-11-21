@@ -7,6 +7,7 @@ import { useNav } from '../../nav';
 import { useRole } from '../../session';
 import { t } from '@shared/i18n';
 import { formatDate } from '@shared/dates';
+import { formatQty } from '@shared/qty';
 
 export interface ProductItem {
   id: number;
@@ -20,7 +21,7 @@ export interface ProductItem {
   minPricePerPack?: number;
   minPricePerCan?: number;
   prices?: { perPack: number; perCan: number; groups: Record<string, { perPack: number; perCan: number } | null> };
-  stock: { inStock: number; reserved: number; available: number; damaged: number; nearestExpiry: string | null; low: boolean; stockValue?: number };
+  stock: { inStock: number; warehouse?: number; car?: number; reserved: number; available: number; damaged: number; nearestExpiry: string | null; low: boolean; stockValue?: number };
 }
 
 /** Ombor: every flavour with photo, price and available stock. */
@@ -41,6 +42,11 @@ export function StockTab() {
 
   return (
     <Page title={t('tabs.stock')} subtitle={role === 'OWNER' && totalValue ? `Ombor qiymati: ${totalValue.toLocaleString('ru-RU').replace(/,/g, ' ')} so'm` : undefined}>
+      {role !== 'DRIVER' && (
+        <Button block size="md" variant="accent" icon="truck" className="mb-2" onClick={() => nav.push('car')}>
+          Mashina: yuklash / tushirish
+        </Button>
+      )}
       {role !== 'AGENT' && (
         <div className="grid grid-cols-2 gap-2">
           {role === 'OWNER' && (
@@ -129,6 +135,7 @@ function ProductCard({ p, onClick }: { p: ProductItem; onClick: () => void }) {
           <Qty cans={a} packSize={p.packSize} />
         </div>
         <div className="text-[12px] text-muted">
+          {p.stock.car ? `mashina ${formatQty(p.stock.car, p.packSize)} · ` : ''}
           {p.stock.reserved > 0 ? `band: ${Math.round(p.stock.reserved / p.packSize)} blok` : 'mavjud'}
         </div>
         {p.stock.nearestExpiry && (
