@@ -1,0 +1,782 @@
+// KINZA DISTRO database.
+// Money: whole so'm (Int). Quantities: cans (Int). Times: UTC. Local dates (delivery, expiry): @db.Date.
+// Nothing is hard-deleted: rows get archivedAt / voidedAt instead.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+  runtime  = "nodejs"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────── People ─────────────
+
+enum Role {
+  OWNER
+  AGENT
+  DRIVER
+}
+
+enum CommissionMode {
+  NONE
+  COLLECTED
+  DELIVERED
+}
+
+model User {
+  id             Int            @id @default(autoincrement())
+  telegramId     BigInt         @unique
+  name           String
+  username       String?
+  phone          String?
+  role           Role
+  active         Boolean        @default(true)
+  commissionMode CommissionMode @default(NONE)
+  commissionBp   Int            @default(0) // basis points: 250 = 2.5%
+  introSeen      Boolean        @default(false)
+  lastSeenAt     DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  shops          Shop[]         @relation("ShopAgent")
+  orders         Order[]        @relation("OrderAgent")
+  driverOrders   Order[]        @relation("OrderDriver")
+  payments       Payment[]      @relation("PaymentReceiver")
+  visits         Visit[]
+  reminders      Reminder[]     @relation("ReminderUser")
+  invitesCreated Invite[]       @relation("InviteCreator")
+  invitesUsed    Invite[]       @relation("InviteUser")
+
+  @@map("users")
+}
+
+model Invite {
+  id          Int       @id @default(autoincrement())
+  token       String    @unique
+  role        Role
+  note        String?
+  createdById Int
+  createdBy   User      @relation("InviteCreator", fields: [createdById], references: [id])
+  usedById    Int?
+  usedBy      User?     @relation("InviteUser", fields: [usedById], references: [id])
+  usedAt      DateTime?
+  revokedAt   DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+
+  @@map("invites")
+}
+
+model Setting {
+  key         String   @id
+  value       Json
+  updatedById Int?
+  updatedAt   DateTime @updatedAt
+
+  @@map("settings")
+}
+
+// ───────────── Catalogue ─────────────
+
+model Product {
+  id              Int       @id @default(autoincrement())
+  name            String    @default("Kinza")
+  flavour         String
+  packSize        Int       @default(24)
+  buyPricePerPack Int       @default(0)
+  minPricePerPack Int       @default(0)
+  minPricePerCan  Int       @default(0)
+  barcode         String?
+  photoFileId     Int?
+  sortOrder       Int       @default(0)
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  prices          ProductPrice[]
+  shopPrices      ShopPrice[]
+  orderItems      OrderItem[]
+  batches         StockBatch[]
+  movements       StockMovement[]
+  supplierItems   SupplierOrderItem[]
+  returnItems     ReturnItem[]
+  countItems      StockCountItem[]
+
+  @@map("products")
+}
+
+model PriceGroup {
+  id         Int       @id @default(autoincrement())
+  name       String
+  sortOrder  Int       @default(0)
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  prices     ProductPrice[]
+  shops      Shop[]
+
+  @@map("price_groups")
+}
+
+/// Price history. The current price = newest row with validFrom <= now.
+/// priceGroupId null = the product's default price.
+model ProductPrice {
+  id           Int         @id @default(autoincrement())
+  productId    Int
+  product      Product     @relation(fields: [productId], references: [id])
+  priceGroupId Int?
+  priceGroup   PriceGroup? @relation(fields: [priceGroupId], references: [id])
+  perPack      Int
+  perCan       Int
+  validFrom    DateTime    @default(now())
+  changedById  Int?
+  createdAt    DateTime    @default(now())
+
+  @@index([productId, priceGroupId, validFrom])
+  @@map("product_prices")
+}
+
+// ───────────── Shops ─────────────
+
+enum ShopStatus {
+  LEAD
+  SAMPLE
+  ORDERED
+  REGULAR
+  INACTIVE
+}
+
+model District {
+  id         Int       @id @default(autoincrement())
+  name       String
+  routeDay   Int? // 1 = Monday … 7 = Sunday
+  sortOrder  Int       @default(0)
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  shops      Shop[]
+
+  @@map("districts")
+}
+
+model Shop {
+  id                 Int         @id @default(autoincrement())
+  name               String
+  contactName        String?
+  phones             String[]
+  address            String?
+  lat                Float?
+  lng                Float?
+  districtId         Int?
+  district           District?   @relation(fields: [districtId], references: [id])
+  priceGroupId       Int?
+  priceGroup         PriceGroup? @relation(fields: [priceGroupId], references: [id])
+  paymentDays        Int?        // null = settings default
+  creditLimit        Int?
+  visitEveryDays     Int?
+  noOrderAlertDays   Int?        // null = settings default
+  status             ShopStatus  @default(LEAD)
+  agentId            Int?
+  agent              User?       @relation("ShopAgent", fields: [agentId], references: [id])
+  createdById        Int?
+  notes              String?
+  photoFileId        Int?
+  legalName          String?
+  stir               String?
+  bankName           String?
+  mfo                String?
+  bankAccount        String?
+  archivedAt         DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  shopPrices         ShopPrice[]
+  orders             Order[]
+  payments           Payment[]
+  returns            Return[]
+  visits             Visit[]
+  reminders          Reminder[]
+
+  @@index([agentId])
+  @@map("shops")
+}
+
+/// Special price for one shop. Old rows get archivedAt (history kept).
+model ShopPrice {
+  id          Int       @id @default(autoincrement())
+  shopId      Int
+  shop        Shop      @relation(fields: [shopId], references: [id])
+  productId   Int
+  product     Product   @relation(fields: [productId], references: [id])
+  perPack     Int
+  perCan      Int
+  createdById Int?
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([shopId, productId])
+  @@map("shop_prices")
+}
+
+// ───────────── Orders ─────────────
+
+enum OrderStatus {
+  DRAFT
+  CONFIRMED
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+/// A sale to a shop. An "opening balance" (debt from before the app) is stored as an
+/// order with isOpening = true and no items, so payments apply to it like any invoice.
+model Order {
+  id                   Int         @id @default(autoincrement())
+  number               String      @unique
+  shopId               Int
+  shop                 Shop        @relation(fields: [shopId], references: [id])
+  agentId              Int?
+  agent                User?       @relation("OrderAgent", fields: [agentId], references: [id])
+  driverId             Int?
+  driver               User?       @relation("OrderDriver", fields: [driverId], references: [id])
+  status               OrderStatus @default(DRAFT)
+  isOpening            Boolean     @default(false)
+  deliveryDate         DateTime    @db.Date
+  subtotal             Int         @default(0) // sum of non-bonus lines
+  discount             Int         @default(0)
+  total                Int         @default(0) // subtotal - discount
+  costTotal            Int         @default(0) // landed cost of delivered cans (incl. bonus)
+  paidAmount           Int         @default(0) // cached from allocations
+  returnedAmount       Int         @default(0) // cached from allocations of returns
+  comment              String?
+  revision             Int         @default(0)
+  idempotencyKey       String?     @unique
+  confirmedAt          DateTime?
+  shippedAt            DateTime?
+  deliveredAt          DateTime?
+  dueDate              DateTime?   @db.Date
+  cancelledAt          DateTime?
+  cancelReason         String?
+  deliveryPhotoFileId  Int?
+  syncNote             String?     // e.g. "not enough stock at sync"
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  items                OrderItem[]
+  allocations          Allocation[]
+  documents            Document[]
+  returns              Return[]
+  targetedPayments     Payment[]   @relation("PaymentTarget")
+
+  @@index([shopId, status])
+  @@index([status, deliveryDate])
+  @@map("orders")
+}
+
+model OrderItem {
+  id           Int       @id @default(autoincrement())
+  orderId      Int
+  order        Order     @relation(fields: [orderId], references: [id])
+  productId    Int
+  product      Product   @relation(fields: [productId], references: [id])
+  orderedCans  Int       // what the shop asked for
+  qtyCans      Int       // current (after delivery adjustments)
+  packSize     Int
+  pricePerPack Int
+  pricePerCan  Int
+  basePerPack  Int       // resolved price before manual edits (for agent limits)
+  basePerCan   Int
+  isBonus      Boolean   @default(false)
+  lineTotal    Int
+  costPerCan   Float?    // average landed cost of the batches used (set at delivery)
+  costTotal    Int       @default(0)
+  sortOrder    Int       @default(0)
+
+  batches      OrderItemBatch[]
+
+  @@map("order_items")
+}
+
+model OrderItemBatch {
+  id          Int        @id @default(autoincrement())
+  orderItemId Int
+  orderItem   OrderItem  @relation(fields: [orderItemId], references: [id])
+  batchId     Int
+  batch       StockBatch @relation(fields: [batchId], references: [id])
+  qtyCans     Int
+  costPerCan  Float
+
+  @@map("order_item_batches")
+}
+
+enum DocKind {
+  ORDER_CONFIRMATION
+  WAYBILL
+  RETURN_ACT
+  RECONCILIATION
+  PAYMENT_RECEIPT
+  SUPPLIER_ORDER
+}
+
+model Document {
+  id              Int       @id @default(autoincrement())
+  kind            DocKind
+  number          String?
+  revision        Int       @default(0)
+  orderId         Int?
+  order           Order?    @relation(fields: [orderId], references: [id])
+  returnId        Int?
+  shopId          Int?
+  paymentId       Int?
+  supplierOrderId Int?
+  periodFrom      DateTime? @db.Date
+  periodTo        DateTime? @db.Date
+  fileId          Int
+  file            File      @relation(fields: [fileId], references: [id])
+  voidedAt        DateTime?
+  voidReason      String?
+  createdById     Int?
+  createdAt       DateTime  @default(now())
+
+  @@index([orderId])
+  @@index([shopId])
+  @@map("documents")
+}
+
+/// Gap-free counters, e.g. key "WAYBILL:2026". Incremented with UPDATE … RETURNING inside
+/// the same transaction that creates the document, so a failed transaction never burns a number.
+model Counter {
+  key   String @id
+  value Int    @default(0)
+
+  @@map("counters")
+}
+
+// ───────────── Money ─────────────
+
+enum PayMethod {
+  CASH
+  CARD
+  TRANSFER
+}
+
+model Payment {
+  id             Int        @id @default(autoincrement())
+  shopId         Int
+  shop           Shop       @relation(fields: [shopId], references: [id])
+  amount         Int
+  method         PayMethod  @default(CASH)
+  paidAt         DateTime
+  receivedById   Int
+  receivedBy     User       @relation("PaymentReceiver", fields: [receivedById], references: [id])
+  targetOrderId  Int?
+  targetOrder    Order?     @relation("PaymentTarget", fields: [targetOrderId], references: [id])
+  comment        String?
+  handoverId     Int?
+  handover       CashHandover? @relation(fields: [handoverId], references: [id])
+  handedOverAt   DateTime?  // null = still "in the hands" of the agent/driver
+  idempotencyKey String?    @unique
+  voidedAt       DateTime?
+  voidReason     String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  allocations    Allocation[]
+
+  @@index([shopId])
+  @@map("payments")
+}
+
+/// How payments and returns cover orders. Recomputed per shop (oldest-first) after every change.
+model Allocation {
+  id        Int      @id @default(autoincrement())
+  orderId   Int
+  order     Order    @relation(fields: [orderId], references: [id])
+  paymentId Int?
+  payment   Payment? @relation(fields: [paymentId], references: [id])
+  returnId  Int?
+  return    Return?  @relation(fields: [returnId], references: [id])
+  amount    Int
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@map("payment_allocations")
+}
+
+model CashHandover {
+  id            Int       @id @default(autoincrement())
+  fromUserId    Int
+  amount        Int
+  confirmedById Int
+  note          String?
+  createdAt     DateTime  @default(now())
+
+  payments      Payment[]
+
+  @@map("cash_handovers")
+}
+
+enum ReturnCondition {
+  SELLABLE
+  DAMAGED
+  EXPIRED
+}
+
+model Return {
+  id          Int          @id @default(autoincrement())
+  number      String       @unique
+  shopId      Int
+  shop        Shop         @relation(fields: [shopId], references: [id])
+  orderId     Int?
+  order       Order?       @relation(fields: [orderId], references: [id])
+  date        DateTime
+  total       Int
+  reason      String?
+  createdById Int
+  voidedAt    DateTime?
+  createdAt   DateTime     @default(now())
+
+  items       ReturnItem[]
+  allocations Allocation[]
+
+  @@map("returns")
+}
+
+model ReturnItem {
+  id          Int             @id @default(autoincrement())
+  returnId    Int
+  return      Return          @relation(fields: [returnId], references: [id])
+  productId   Int
+  product     Product         @relation(fields: [productId], references: [id])
+  qtyCans     Int
+  pricePerCan Int
+  lineTotal   Int
+  condition   ReturnCondition @default(DAMAGED)
+
+  @@map("return_items")
+}
+
+model ExpenseCategory {
+  id         Int       @id @default(autoincrement())
+  name       String
+  sortOrder  Int       @default(0)
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  expenses   Expense[]
+
+  @@map("expense_categories")
+}
+
+model Expense {
+  id            Int             @id @default(autoincrement())
+  categoryId    Int
+  category      ExpenseCategory @relation(fields: [categoryId], references: [id])
+  amount        Int
+  date          DateTime        @db.Date
+  comment       String?
+  receiptFileId Int?
+  createdById   Int
+  voidedAt      DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@map("expenses")
+}
+
+// ───────────── Supplier (Tashkent) ─────────────
+
+enum SupplierOrderStatus {
+  DRAFT
+  ORDERED
+  IN_TRANSIT
+  RECEIVED
+  CANCELLED
+}
+
+model SupplierOrder {
+  id            Int                 @id @default(autoincrement())
+  number        String              @unique
+  status        SupplierOrderStatus @default(DRAFT)
+  arrivalDate   DateTime?           @db.Date
+  coverUntil    DateTime?           @db.Date
+  invoiceAmount Int?                // supplier invoice total (what I owe)
+  comment       String?
+  orderedAt     DateTime?
+  receivedAt    DateTime?
+  createdById   Int
+  cancelledAt   DateTime?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  items         SupplierOrderItem[]
+  costs         ShipmentCost[]
+  payments      SupplierPayment[]
+  batches       StockBatch[]
+
+  @@map("supplier_orders")
+}
+
+model SupplierOrderItem {
+  id              Int           @id @default(autoincrement())
+  supplierOrderId Int
+  supplierOrder   SupplierOrder @relation(fields: [supplierOrderId], references: [id])
+  productId       Int
+  product         Product       @relation(fields: [productId], references: [id])
+  proposedPacks   Int           @default(0)
+  orderedPacks    Int
+  buyPricePerPack Int
+  receivedCans    Int?
+  damagedCans     Int?
+  expiry          DateTime?     @db.Date
+
+  @@map("supplier_order_items")
+}
+
+model ShipmentCost {
+  id              Int           @id @default(autoincrement())
+  supplierOrderId Int
+  supplierOrder   SupplierOrder @relation(fields: [supplierOrderId], references: [id])
+  kind            String        @default("cargo")
+  amount          Int
+  comment         String?
+  createdAt       DateTime      @default(now())
+
+  @@map("shipment_costs")
+}
+
+model SupplierPayment {
+  id              Int            @id @default(autoincrement())
+  supplierOrderId Int?
+  supplierOrder   SupplierOrder? @relation(fields: [supplierOrderId], references: [id])
+  amount          Int
+  method          PayMethod      @default(CASH)
+  paidAt          DateTime
+  comment         String?
+  createdById     Int
+  voidedAt        DateTime?
+  createdAt       DateTime       @default(now())
+
+  @@map("supplier_payments")
+}
+
+// ───────────── Stock ─────────────
+
+model StockBatch {
+  id               Int            @id @default(autoincrement())
+  productId        Int
+  product          Product        @relation(fields: [productId], references: [id])
+  supplierOrderId  Int?
+  supplierOrder    SupplierOrder? @relation(fields: [supplierOrderId], references: [id])
+  expiry           DateTime?      @db.Date
+  landedCostPerCan Float
+  receivedCans     Int
+  remainingCans    Int            // sellable cans left in this batch
+  createdAt        DateTime       @default(now())
+
+  movements        StockMovement[]
+  orderItems       OrderItemBatch[]
+
+  @@index([productId, remainingCans])
+  @@map("stock_batches")
+}
+
+enum MovementType {
+  SUPPLIER_IN
+  DELIVERY_OUT
+  RETURN_IN
+  SAMPLE_OUT
+  DAMAGE
+  EXPIRED
+  WRITE_OFF
+  COUNT_CORRECTION
+  ARRIVAL_DAMAGED
+}
+
+enum StockPool {
+  SELLABLE
+  DAMAGED
+}
+
+model StockMovement {
+  id              Int          @id @default(autoincrement())
+  productId       Int
+  product         Product      @relation(fields: [productId], references: [id])
+  batchId         Int?
+  batch           StockBatch?  @relation(fields: [batchId], references: [id])
+  type            MovementType
+  pool            StockPool    @default(SELLABLE)
+  qtyCans         Int          // signed: + in, − out
+  costPerCan      Float?
+  orderId         Int?
+  returnId        Int?
+  supplierOrderId Int?
+  stockCountId    Int?
+  shopId          Int?
+  reason          String?
+  userId          Int?
+  createdAt       DateTime     @default(now())
+
+  @@index([productId, pool])
+  @@map("stock_movements")
+}
+
+model StockCount {
+  id          Int              @id @default(autoincrement())
+  note        String?
+  createdById Int
+  createdAt   DateTime         @default(now())
+
+  items       StockCountItem[]
+
+  @@map("stock_counts")
+}
+
+model StockCountItem {
+  id           Int        @id @default(autoincrement())
+  stockCountId Int
+  stockCount   StockCount @relation(fields: [stockCountId], references: [id])
+  productId    Int
+  product      Product    @relation(fields: [productId], references: [id])
+  expectedCans Int
+  countedCans  Int
+
+  @@map("stock_count_items")
+}
+
+// ───────────── Field work ─────────────
+
+enum VisitResult {
+  ORDERED
+  THINKING
+  REFUSED
+  CLOSED
+}
+
+model Visit {
+  id             Int         @id @default(autoincrement())
+  shopId         Int
+  shop           Shop        @relation(fields: [shopId], references: [id])
+  userId         Int
+  user           User        @relation(fields: [userId], references: [id])
+  result         VisitResult
+  note           String?
+  lat            Float?
+  lng            Float?
+  followUpDate   DateTime?   @db.Date
+  visitedAt      DateTime    @default(now())
+  idempotencyKey String?     @unique
+  createdAt      DateTime    @default(now())
+
+  @@index([shopId, visitedAt])
+  @@map("visits")
+}
+
+model Reminder {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  user        User      @relation("ReminderUser", fields: [userId], references: [id])
+  shopId      Int?
+  shop        Shop?     @relation(fields: [shopId], references: [id])
+  orderId     Int?
+  visitId     Int?
+  note        String
+  dueDate     DateTime  @db.Date
+  snoozedTo   DateTime? @db.Date
+  doneAt      DateTime?
+  createdById Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId, dueDate])
+  @@map("reminders")
+}
+
+// ───────────── System ─────────────
+
+enum FileKind {
+  PRODUCT_PHOTO
+  SHOP_PHOTO
+  LOGO
+  DELIVERY_PHOTO
+  RECEIPT_PHOTO
+  PDF
+  EXPORT
+  BACKUP
+}
+
+model File {
+  id          Int        @id @default(autoincrement())
+  key         String     @unique
+  kind        FileKind
+  name        String
+  contentType String
+  size        Int
+  createdById Int?
+  createdAt   DateTime   @default(now())
+
+  documents   Document[]
+
+  @@map("files")
+}
+
+model NotificationSent {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  kind      String
+  refKey    String   @default("")
+  day       String   // local date YYYY-MM-DD
+  createdAt DateTime @default(now())
+
+  @@unique([userId, kind, refKey, day])
+  @@map("notifications_sent")
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  action    String
+  entity    String
+  entityId  String?
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_log")
+}
+
+model ProcessedUpdate {
+  updateId  BigInt   @id
+  createdAt DateTime @default(now())
+
+  @@map("processed_updates")
+}
+
+model SchedulerRun {
+  id         Int       @id @default(autoincrement())
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  ok         Boolean   @default(false)
+  log        String?
+
+  @@map("scheduler_runs")
+}
+
+/// Offline sync: one row per idempotency key, so a retried request returns the first result.
+model SyncRequest {
+  key       String   @id
+  userId    Int
+  kind      String
+  result    Json?
+  createdAt DateTime @default(now())
+
+  @@map("sync_requests")
+}

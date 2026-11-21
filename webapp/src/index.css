@@ -1,0 +1,170 @@
+@import 'tailwindcss';
+
+/* Colour tokens. Light by default; dark when Telegram is dark (data-theme="dark"). */
+:root {
+  --bg: #f3f6f4;
+  --card: #ffffff;
+  --card2: #eef3f0;
+  --text: #10261b;
+  --muted: #5b6f64;
+  --line: #e1e9e4;
+  --brand: #0f5d3a;
+  --brand-ink: #ffffff;
+  --brand-soft: #e3f1e9;
+  --accent: #e8a317;
+  --accent-ink: #2a1d00;
+  --ok: #138a4b;
+  --ok-soft: #e2f5ea;
+  --warn: #b26b00;
+  --warn-soft: #fff1d9;
+  --danger: #c62f2f;
+  --danger-soft: #fde8e8;
+  --info: #1f62c9;
+  --info-soft: #e5eefc;
+  --grey-soft: #edf0ee;
+  --shadow: 0 1px 2px rgba(16, 38, 27, 0.06), 0 4px 16px rgba(16, 38, 27, 0.05);
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --bg: #0b1510;
+  --card: #13221a;
+  --card2: #1a2d22;
+  --text: #ecf4ef;
+  --muted: #94a99c;
+  --line: #22382b;
+  --brand: #2f9e68;
+  --brand-ink: #ffffff;
+  --brand-soft: #173828;
+  --accent: #f0b52e;
+  --accent-ink: #231800;
+  --ok: #43c47f;
+  --ok-soft: #153a25;
+  --warn: #f0b52e;
+  --warn-soft: #3a2e10;
+  --danger: #f06a6a;
+  --danger-soft: #3f1a1a;
+  --info: #6ea3ff;
+  --info-soft: #172a4a;
+  --grey-soft: #1d2b23;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-card2: var(--card2);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-soft: var(--brand-soft);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-grey-soft: var(--grey-soft);
+  --radius-card: 18px;
+  --shadow-card: var(--shadow);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 16.5px;
+  line-height: 1.4;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+input,
+textarea {
+  font-size: 17px; /* stops iOS zoom */
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.safe-bottom {
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes toast-in {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: 200px 0;
+  }
+}
+.animate-sheet {
+  animation: sheet-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.animate-fade {
+  animation: fade-in 0.18s ease-out;
+}
+.animate-toast {
+  animation: toast-in 0.2s ease-out;
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--card2) 0px, var(--line) 80px, var(--card2) 160px);
+  background-size: 400px 100%;
+  animation: shimmer 1.2s infinite linear;
+}

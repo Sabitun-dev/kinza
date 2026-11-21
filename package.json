@@ -1,0 +1,62 @@
+{
+  "name": "kinza-distro",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite --config webapp/vite.config.ts",
+    "build": "npm run db:generate && node scripts/build-db.mjs && vite build --config webapp/vite.config.ts",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:diff": "prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --script",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p webapp/tsconfig.json",
+    "test": "vitest run",
+    "seed": "tsx scripts/seed.ts",
+    "restore": "tsx scripts/restore.ts"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "1.2.1",
+    "@netlify/blobs": "11.1.9",
+    "@netlify/functions": "6.1.1",
+    "@pdf-lib/fontkit": "1.1.1",
+    "@prisma/adapter-neon": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "exceljs": "4.4.0",
+    "grammy": "1.46.0",
+    "hono": "4.13.19",
+    "pdf-lib": "1.17.1",
+    "ws": "8.23.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.4.3",
+    "@tailwindcss/vite": "4.3.5",
+    "@types/leaflet": "1.9.22",
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/ws": "8.18.2",
+    "@vitejs/plugin-react": "6.3.0",
+    "dotenv": "18.0.10",
+    "idb": "8.0.4",
+    "leaflet": "1.9.4",
+    "pglite-prisma-adapter": "0.7.2",
+    "prisma": "7.10.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "recharts": "3.11.0",
+    "tailwindcss": "4.3.5",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vite": "8.3.8",
+    "vitest": "5.1.1"
+  },
+  "allowScripts": {
+    "@prisma/engines@7.10.1": true,
+    "esbuild@0.28.2": true,
+    "prisma@7.10.1": true
+  }
+}
