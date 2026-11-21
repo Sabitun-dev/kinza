@@ -33,22 +33,24 @@ async function world() {
 const to = (t: Awaited<ReturnType<typeof world>>, tg: number) => t.notifier.sent.filter((m) => m.chatId === tg);
 
 describe('scheduler', () => {
-  it('sends the 08:00 digest once per person with working buttons', async () => {
+  it('08:00: today\'s area and shop names (owner and agent separately), drivers keep their delivery digest', async () => {
     const t = await world();
     t.notifier.sent.length = 0;
     t.setClock(at('07:50'));
     await runScheduler(t.deps);
-    expect(t.notifier.sent.filter((m) => m.text?.includes('Xayrli tong'))).toHaveLength(0);
+    expect(t.notifier.sent.filter((m) => m.text?.includes('Bugun:'))).toHaveLength(0);
 
     t.setClock(at('08:05'));
     await runScheduler(t.deps);
-    const owner = to(t, OWNER_TG).find((m) => m.text?.includes('Xayrli tong'))!;
-    expect(owner.text).toContain('Bugun yetkazish: 2 ta');
-    expect(owner.text).toContain("Muddati o'tgan qarz");
-    expect(owner.buttons!.flat().some((b) => 'app' in b && b.app.startsWith('d_'))).toBe(true);
+    const owner = to(t, OWNER_TG).find((m) => m.text?.includes('☀️'))!;
+    expect(owner.text).toContain("Bugun: A hudud — 1 ta do'kon");
+    expect(owner.text).toContain('1. Owner shop');
+    expect(owner.text).not.toContain('Agent shop');
+    expect(owner.buttons!.flat()).toContainEqual({ text: 'Ochish', app: 'today' });
+    expect(owner.buttons!.flat().some((b) => 'app' in b && b.app === 'drive')).toBe(true);
 
-    const agent = to(t, 2001).find((m) => m.text?.includes('Xayrli tong'))!;
-    expect(agent.text).toContain('Agent shop');
+    const agent = to(t, 2001).find((m) => m.text?.includes('☀️'))!;
+    expect(agent.text).toContain('1. Agent shop');
     expect(agent.text).not.toContain('Owner shop');
     expect(agent.text).toContain('Eslatmalar: 1');
 
@@ -56,7 +58,7 @@ describe('scheduler', () => {
     expect(driver.text).toContain('Bugun yetkazish: 2 ta');
     expect(driver.text).not.toContain("Muddati o'tgan");
 
-    // Overdue alert and the agent's own reminder
+    // Overdue alert and the agent's own reminder still come
     expect(to(t, OWNER_TG).some((m) => m.text?.includes("muddati o'tgan qarz") && m.text.includes('Agent shop'))).toBe(true);
     expect(to(t, 2001).some((m) => m.text?.includes('Eslatma') && m.text.includes('Baraka'))).toBe(true);
     expect(to(t, 3001).some((m) => m.text?.includes('Eslatma'))).toBe(false);
@@ -66,19 +68,38 @@ describe('scheduler', () => {
     t.setClock(at('08:20'));
     await runScheduler(t.deps);
     expect(t.notifier.sent.length).toBe(count);
+
+    // 17:00: names of shops still left
+    t.setClock(at('17:05'));
+    await runScheduler(t.deps);
+    const left = to(t, OWNER_TG).find((m) => m.text?.includes("Hali 1 ta do'kon qoldi"));
+    expect(left?.text).toContain('Owner shop');
   });
 
-  it('20:00 digest has tomorrow and the Tashkent proposal; cutoff reminder fires', async () => {
+  it('Tashkent: the cutoff reminder only on the order day (Thursday); 20:00 has tomorrow\'s list and the proposal', async () => {
     const t = await world();
     t.setClock(at('15:05'));
+    await runScheduler(t.deps);
+    expect(to(t, OWNER_TG).some((m) => m.text?.includes('Toshkentga buyurtma bering'))).toBe(false); // Monday
+
+    t.setClock(at('20:01'));
+    await runScheduler(t.deps);
+    const mon = to(t, OWNER_TG).find((m) => m.text?.includes('🌙'))!;
+    expect(mon.text).toContain('Kun yakuni qilinmagan');
+    expect(mon.text).toContain('Ertaga');
+    expect(mon.text).toContain('Owner shop'); // still ⏳ today → carried to tomorrow
+    expect(mon.text).not.toContain('Toshkentga buyurtma');
+
+    const THU = '2026-11-26';
+    t.setClock(at('15:05', THU));
     await runScheduler(t.deps);
     const cutoff = to(t, OWNER_TG).find((m) => m.text?.includes('Toshkentga buyurtma bering'));
     expect(cutoff).toBeTruthy();
     expect(cutoff!.buttons![0][0]).toEqual({ text: '📦 Toshkentga buyurtma', app: 'tashkent' });
-    t.setClock(at('20:01'));
+    t.setClock(at('20:01', THU));
     await runScheduler(t.deps);
-    const ev = to(t, OWNER_TG).find((m) => m.text?.includes('🌙'))!;
-    expect(ev.text).toContain('Toshkentga buyurtma kerak');
+    const thu = to(t, OWNER_TG).filter((m) => m.text?.includes('🌙')).at(-1)!;
+    expect(thu.text).toContain('Toshkentga buyurtma (Shanba keladi)');
   });
 
   it('snooze buttons postpone reminders and alerts by one day', async () => {

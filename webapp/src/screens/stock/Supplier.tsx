@@ -52,7 +52,7 @@ export function SupplierProposal() {
 
   if (!data) return <Page title="Toshkentga buyurtma"><SkeletonList /></Page>;
   return (
-    <Page title="Toshkentga buyurtma" subtitle={`Kelishi: ${dayLabel(data.arrivalDate)} · ${formatDate(data.coverUntil)} gacha buyurtmalar`}>
+    <Page title="Toshkentga buyurtma" subtitle={`Kelishi: ${dayLabel(data.arrivalDate)} · ${data.coverWeeks} haftaga`}>
       <Card className="bg-brand text-brand-ink">
         <div className="text-[14px] opacity-80">Buyurtma berish: {dayLabel(data.orderDay)} {data.cutoff} gacha</div>
         <div className="num mt-1 text-[28px] font-bold">{totalPacks} blok</div>
@@ -71,15 +71,17 @@ export function SupplierProposal() {
           </div>
         </div>
       </Card>
-      <div className="mt-2 px-1 text-[13px] text-muted">Hisob: buyurtmalar − omborda va yo'ldagi + zaxira, butun blokka va eng kam miqdorga yaxlitlangan.</div>
+      <div className="mt-2 px-1 text-[13px] text-muted">
+        Hisob: o'rtacha haftalik sotuv (4 hafta) × {data.coverWeeks} + oldindan buyurtmalar − (ombor + mashina) − yo'ldagi; butun blokka va eng kam miqdorga yaxlitlangan.
+      </div>
       <div className="mt-3 space-y-2">
         {lines.map((l: any) => (
           <Card key={l.productId} className={cx('flex items-center gap-3', (packs[l.productId] ?? 0) > 0 && 'ring-2 ring-brand')}>
             <div className="min-w-0 flex-1">
               <div className="truncate font-bold">{l.flavour}</div>
               <div className="text-[12.5px] text-muted">
-                buyurtma {l.ordersPacks} · bor {l.inStockPacks}
-                {l.incomingPacks ? ` · yo'lda ${l.incomingPacks}` : ''} · taklif {l.proposedPacks}
+                haftasiga {l.avgWeeklyPacks} · buyurtma {l.preorderPacks} · ombor {l.warehousePacks} · mashina {l.carPacks}
+                {l.inTransitPacks ? ` · yo'lda ${l.inTransitPacks}` : ''} · taklif {l.proposedPacks}
               </div>
             </div>
             <Stepper value={packs[l.productId] ?? 0} onChange={(v) => setPacks((p) => ({ ...p, [l.productId]: v }))} label="blok" />

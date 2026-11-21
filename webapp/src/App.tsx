@@ -107,6 +107,10 @@ function useDeepLink() {
       debtors: ['more', 'debtors'],
       reminders: ['more', 'reminders'],
       route: ['today', 'route'],
+      drive: ['today', 'drive'],
+      load: ['stock', 'car-load', { mode: 'load' }],
+      dayclose: ['today', 'day-close'],
+      coverage: ['more', 'coverage'],
       stock: ['stock'],
       today: ['today'],
     };

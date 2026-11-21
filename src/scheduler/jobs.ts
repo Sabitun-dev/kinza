@@ -5,12 +5,13 @@ import { cutoffMessage, eveningDigest, morningDigest } from '../reminders/digest
 import { buildProposal } from '../domain/supplier.ts';
 import { shopBalances } from '../domain/ledger.ts';
 import { esc } from '../core/notifier.ts';
-import { addDays, daysBetween, localDate, toDbDate, fromDbDate, startOfLocalDay } from '../shared/dates.ts';
+import { addDays, daysBetween, localDate, toDbDate, fromDbDate, startOfLocalDay, weekday } from '../shared/dates.ts';
 import { formatMoney } from '../shared/money.ts';
 import type { Job } from './run.ts';
 import { claimOnce } from './once.ts';
 import { autoCarryOver, ensureChecklist } from '../checklist/checklist.ts';
 import { cleanupGps } from '../routing/drive.ts';
+import { eveningVan, middayVan, morningVan } from '../reminders/vanDigests.ts';
 
 type U = { id: number; telegramId: bigint; role: 'OWNER' | 'AGENT' | 'DRIVER'; name: string };
 
@@ -44,7 +45,11 @@ const morning: Job = {
   at: (s) => s.morningDigestTime,
   run: async (deps, s, day) => {
     let n = 0;
-    for (const u of await activeUsers(deps)) if (await sendOnce(deps, u, 'morning', '', day, await morningDigest(deps, s, u, day))) n++;
+    for (const u of await activeUsers(deps)) {
+      // Owner and agents: today's shop list; drivers: their deliveries
+      const msg = u.role === 'DRIVER' ? await morningDigest(deps, s, u, day) : await morningVan(deps, s, u, day);
+      if (await sendOnce(deps, u, 'morning', '', day, msg)) n++;
+    }
     return `${n} sent`;
   },
 };
@@ -55,8 +60,8 @@ const evening: Job = {
   run: async (deps, s, day) => {
     let n = 0;
     for (const u of await activeUsers(deps)) {
-      const proposal = u.role === 'OWNER' ? await proposalSummary(deps, s, u) : null;
-      if (await sendOnce(deps, u, 'evening', '', day, await eveningDigest(deps, s, u, day, proposal))) n++;
+      const msg = u.role === 'DRIVER' ? await eveningDigest(deps, s, u, day, null) : await eveningVan(deps, s, u, day);
+      if (await sendOnce(deps, u, 'evening', '', day, msg)) n++;
     }
     return `${n} sent`;
   },
@@ -67,6 +72,7 @@ const cutoff: Job = {
   name: 'cutoff',
   at: (s) => s.cutoffReminderTime,
   run: async (deps, s, day) => {
+    if (weekday(day) !== s.supplierOrderWeekday) return 'not the order day';
     const owners = (await activeUsers(deps)).filter((u) => u.role === 'OWNER');
     if (!owners.length) return 'no owner';
     const orderedToday = await deps.db.supplierOrder.count({ where: { createdAt: { gte: startOfLocalDay(day) }, status: { not: 'CANCELLED' } } });
@@ -145,6 +151,20 @@ const alerts: Job = {
   },
 };
 
+/** 17:00 — "Hali 4 ta do'kon qoldi: …" */
+const midday: Job = {
+  name: 'midday',
+  at: (s) => s.middayReminderTime,
+  run: async (deps, s, day) => {
+    let n = 0;
+    for (const u of await activeUsers(deps)) {
+      if (u.role === 'DRIVER') continue;
+      if (await sendOnce(deps, u, 'midday', '', day, await middayVan(deps, s, u, day))) n++;
+    }
+    return `${n} sent`;
+  },
+};
+
 /** Early morning: today's checklist is created and stored for every owner and agent. */
 const checklists: Job = {
   name: 'checklists',
@@ -173,4 +193,4 @@ const gpsCleanup: Job = {
   run: async (deps) => String(await cleanupGps(deps.db, deps.now())),
 };
 
-export const scheduledJobs: Job[] = [checklists, morning, alerts, cutoff, evening, carryOver, gpsCleanup];
+export const scheduledJobs: Job[] = [checklists, morning, alerts, cutoff, midday, evening, carryOver, gpsCleanup];

@@ -99,7 +99,8 @@ export async function ensureChecklist(db: DbOrTx, s: Settings, u: Who, date: str
   }
 }
 
-async function createChecklist(tx: Tx, s: Settings, u: Who, date: string) {
+/** Which shops belong on a day's list (not saved). */
+async function computeItems(tx: DbOrTx, s: Settings, u: Who, date: string) {
   // Days since the previous working day (days off roll their shops over to today)
   const prev = await prevWorkingDay(tx, s, date);
   const days: string[] = [];
@@ -136,6 +137,11 @@ async function createChecklist(tx: Tx, s: Settings, u: Who, date: string) {
     items.set(o.shopId, { shopId: o.shopId, source: 'PREORDER', carryCount: prevItem?.carryCount ?? 0, orderId: o.id });
   }
 
+  return { items, areaIds, carried };
+}
+
+async function createChecklist(tx: Tx, s: Settings, u: Who, date: string) {
+  const { items, areaIds, carried } = await computeItems(tx, s, u, date);
   const list = await tx.checklist.create({
     data: {
       userId: u.id,
@@ -146,6 +152,26 @@ async function createChecklist(tx: Tx, s: Settings, u: Who, date: string) {
   });
   if (carried.length) await tx.checklistItem.updateMany({ where: { id: { in: carried.map((c) => c.id) } }, data: { carriedOn: true } });
   return list;
+}
+
+/**
+ * Tomorrow's list before it exists (for the 20:00 message): due shops, pre-orders, earlier moves,
+ * and today's ⏳ shops that will be carried over at 23:00.
+ */
+export async function previewChecklist(db: DbOrTx, s: Settings, u: Who, date: string, today: string) {
+  const { items, areaIds } = await computeItems(db, s, u, date);
+  const leftToday = await db.checklistItem.findMany({ where: { status: 'PENDING', checklist: { userId: u.id, date: toDbDate(today) } } });
+  if (date === (await nextWorkingDay(db, s, today))) {
+    for (const i of leftToday) if (!items.has(i.shopId)) items.set(i.shopId, { shopId: i.shopId, source: 'CARRY', carryCount: i.carryCount + 1 });
+  }
+  const shops = await db.shop.findMany({ where: { id: { in: [...items.keys()] } }, select: { id: true, name: true, lat: true, lng: true, priority: true } });
+  const areas = await db.district.findMany({ where: { id: { in: [...areaIds] } } });
+  const name = new Map(shops.map((x) => [x.id, x]));
+  const rank: Record<string, number> = { CARRY: 0, PREORDER: 1, MOVED: 2, ROUTE: 3, NEW: 4 };
+  const list = [...items.values()]
+    .map((i) => ({ ...i, name: name.get(i.shopId)?.name ?? '' }))
+    .sort((a, b) => rank[a.source] - rank[b.source] || a.name.localeCompare(b.name));
+  return { date, areas: areas.map((a) => a.name), items: list };
 }
 
 /** A shop created or moved into today's area during the day is added with a "Yangi" badge. */

@@ -3,14 +3,14 @@ import { proposePacks, landedPerPack } from '../src/domain/supplier.ts';
 import { createTestApp } from './helpers/app.ts';
 import { addProduct, addShop, addStock } from './helpers/fixtures.ts';
 
-describe('Tashkent proposal (pure)', () => {
-  it('orders 50, available 12, safety 5, minimum 10 → 43 packs', () => {
-    expect(proposePacks({ ordersPacks: 50, availablePacks: 12, safetyPacks: 5, minPacks: 10 })).toBe(43);
+describe('Tashkent proposal (pure, weekly by stock level)', () => {
+  it('Limon: 12/week × 1.5 + 4 pre-orders − (6 warehouse + 3 car) − 0 in transit = 13 packs', () => {
+    expect(proposePacks({ avgWeeklyPacks: 12, coverWeeks: 1.5, preorderPacks: 4, stockPacks: 9, inTransitPacks: 0, minPacks: 10 })).toBe(13);
   });
-  it('rounds up to whole packs and to the supplier minimum', () => {
-    expect(proposePacks({ ordersPacks: 3.25, availablePacks: 0, safetyPacks: 0, minPacks: 0 })).toBe(4);
-    expect(proposePacks({ ordersPacks: 6, availablePacks: 2, safetyPacks: 1, minPacks: 10 })).toBe(10);
-    expect(proposePacks({ ordersPacks: 5, availablePacks: 30, safetyPacks: 5, minPacks: 10 })).toBe(0);
+  it('rounds up to whole packs and to the supplier minimum; in transit counts', () => {
+    expect(proposePacks({ avgWeeklyPacks: 2.1, coverWeeks: 1.5, preorderPacks: 0, stockPacks: 0, inTransitPacks: 0, minPacks: 0 })).toBe(4);
+    expect(proposePacks({ avgWeeklyPacks: 4, coverWeeks: 1.5, preorderPacks: 0, stockPacks: 2, inTransitPacks: 0, minPacks: 10 })).toBe(10);
+    expect(proposePacks({ avgWeeklyPacks: 12, coverWeeks: 1.5, preorderPacks: 4, stockPacks: 9, inTransitPacks: 13, minPacks: 10 })).toBe(0);
   });
   it('landed cost: 90 000 + 600 000 cargo over 200 packs = 93 000', () => {
     expect(landedPerPack(90_000, 600_000, 200)).toBe(93_000);
@@ -18,20 +18,29 @@ describe('Tashkent proposal (pure)', () => {
 });
 
 describe('supplier flow', () => {
-  it('the proposal matches the hand calculation', async () => {
+  it('the weekly proposal matches the hand calculation (sales, pre-orders, warehouse, car, in transit)', async () => {
     const t = await createTestApp();
     const limon = await addProduct(t, 'Limon', 120_000, 90_000);
     const shop = await addShop(t, 'Baraka');
-    await addStock(t, limon, 12 * 24);
-    await t.owner.post('/api/orders', { shopId: shop, lines: [{ productId: limon, qtyCans: 50 * 24 }], confirm: true, deliveryDate: new Date(Date.now() + 86400000 * 2).toISOString().slice(0, 10) });
-    const p = await t.owner.get('/api/supplier/proposal?coverUntil=2099-01-01');
+    // 48 packs sold in the last 4 weeks → 12 per week
+    await addStock(t, limon, 48 * 24);
+    const sold = await t.owner.post('/api/orders', { shopId: shop, lines: [{ productId: limon, qtyCans: 48 * 24 }], confirm: true, force: true });
+    await t.owner.post(`/api/orders/${sold.data.id}/deliver`, {});
+    // Now 6 packs in the warehouse, 3 in the car, a 4-pack pre-order
+    await addStock(t, limon, 9 * 24);
+    await t.owner.post('/api/car/load', { lines: [{ productId: limon, qtyCans: 3 * 24 }] });
+    await t.owner.post('/api/orders', { shopId: shop, lines: [{ productId: limon, qtyCans: 4 * 24 }], confirm: true, force: true, deliveryDate: new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10) });
+    const p = await t.owner.get('/api/supplier/proposal');
     const line = p.data.lines.find((l: any) => l.productId === limon);
-    expect(line.ordersPacks).toBe(50);
-    expect(line.inStockPacks).toBe(12);
-    expect(line.proposedPacks).toBe(43);
-    expect(line.expectedCost).toBe(43 * 90_000);
-    expect(line.expectedRevenue).toBe(43 * 120_000);
-    expect(line.expectedProfit).toBe(43 * 30_000);
+    expect(line).toMatchObject({ avgWeeklyPacks: 12, preorderPacks: 4, warehousePacks: 6, carPacks: 3, inTransitPacks: 0, proposedPacks: 13 });
+    expect(line.expectedCost).toBe(13 * 90_000);
+    expect(line.expectedRevenue).toBe(13 * 120_000);
+    expect(line.expectedProfit).toBe(13 * 30_000);
+    // An order already on its way is subtracted
+    const so = await t.owner.post('/api/supplier-orders', { lines: [{ productId: limon, orderedPacks: 13 }] });
+    await t.owner.post(`/api/supplier-orders/${so.data.id}/status`, { status: 'ORDERED' });
+    const p2 = await t.owner.get('/api/supplier/proposal');
+    expect(p2.data.lines.find((l: any) => l.productId === limon).proposedPacks).toBe(0);
   });
 
   it('receiving with differences updates stock, landed cost and supplier balance', async () => {

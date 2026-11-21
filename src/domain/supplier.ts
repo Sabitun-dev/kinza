@@ -11,59 +11,74 @@ import { stockLevels } from './stockLevels.ts';
 import { movement } from './stock.ts';
 import { bizInfo, esc, sendDocumentToChat, storeDocument } from './docs.ts';
 import { supplierOrderDocument } from '../pdf/documents.ts';
-import { addDays, addWorkingDays, fromDbDate, localDate, localTime, toDbDate } from '../shared/dates.ts';
+import { addDays, fromDbDate, localDate, localTime, nextWeekday, startOfLocalDay, toDbDate, weekday } from '../shared/dates.ts';
 
-// ───────────────────────── Proposal ─────────────────────────
+// ───────────────────────── Proposal (weekly, by stock level) ─────────────────────────
 
 export interface ProposalInput {
-  ordersPacks: number; // confirmed orders for the covered dates, in packs (may be fractional)
-  availablePacks: number; // on hand + already on the way
-  safetyPacks: number;
-  minPacks: number;
+  avgWeeklyPacks: number; // average weekly sales over the last 4 weeks
+  coverWeeks: number; // how many weeks this shipment must cover (default 1.5)
+  preorderPacks: number; // confirmed pre-orders not delivered yet
+  stockPacks: number; // warehouse + car
+  inTransitPacks: number; // already ordered from Tashkent
+  minPacks: number; // supplier minimum per flavour
 }
 
-/** orders − available + safety, rounded up to whole packs and to the supplier minimum. */
-export function proposePacks({ ordersPacks, availablePacks, safetyPacks, minPacks }: ProposalInput): number {
-  const need = Math.ceil(ordersPacks - availablePacks + safetyPacks - 1e-9);
+/**
+ * avg weekly × cover weeks + pre-orders − (warehouse + car) − in transit,
+ * rounded up to whole packs and to the supplier minimum.
+ * Example: Limon 12/week × 1.5 + 4 − (6 + 3) − 0 = 13 packs.
+ */
+export function proposePacks(x: ProposalInput): number {
+  const need = Math.ceil(x.avgWeeklyPacks * x.coverWeeks + x.preorderPacks - x.stockPacks - x.inTransitPacks - 1e-9);
   if (need <= 0) return 0;
-  return Math.max(need, minPacks);
+  return Math.max(need, x.minPacks);
 }
 
-/** The next shipment: ordered today before the cutoff, otherwise tomorrow; arrives after lead time. */
+/** The weekly order: order day (default Thursday, before the cutoff time) and arrival day (Saturday). */
 export function nextShipment(ctx: Ctx) {
   const today = localDate(ctx.now());
-  const beforeCutoff = localTime(ctx.now()) < ctx.settings.supplierCutoffTime;
-  const orderDay = beforeCutoff ? today : addDays(today, 1);
-  const arrival = addWorkingDays(orderDay, Math.max(1, ctx.settings.supplierLeadDays), false);
-  return { orderDay, arrival, coverUntil: addWorkingDays(arrival, 1, ctx.settings.skipSundays) };
+  const s = ctx.settings;
+  const orderToday = weekday(today) === s.supplierOrderWeekday && localTime(ctx.now()) < s.supplierCutoffTime;
+  const orderDay = orderToday ? today : nextWeekday(today, s.supplierOrderWeekday);
+  const arrival = nextWeekday(orderDay, s.supplierArrivalWeekday);
+  return { orderDay, arrival, coverUntil: addDays(arrival, Math.round(s.coverWeeks * 7)) };
 }
 
-export async function buildProposal(ctx: Ctx, coverUntil?: string) {
+export async function buildProposal(ctx: Ctx, _coverUntil?: string) {
   const ship = nextShipment(ctx);
-  const until = coverUntil ?? ship.coverUntil;
+  const today = localDate(ctx.now());
   const products = await ctx.db.product.findMany({ where: { archivedAt: null }, orderBy: [{ sortOrder: 'asc' }, { flavour: 'asc' }] });
-  const [levels, demand, incoming, prices, lastCargo] = await Promise.all([
+  const since = startOfLocalDay(addDays(today, -28));
+  const [levels, sold, preorders, incoming, prices, lastCargo] = await Promise.all([
     stockLevels(ctx.db, products.map((p) => p.id)),
-    ctx.db.orderItem.groupBy({
-      by: ['productId'],
-      where: { order: { status: { in: ['CONFIRMED', 'IN_TRANSIT'] }, deliveryDate: { lte: toDbDate(until) } } },
-      _sum: { qtyCans: true },
-    }),
+    ctx.db.orderItem.groupBy({ by: ['productId'], where: { order: { status: 'DELIVERED', isOpening: false, deliveredAt: { gte: since } } }, _sum: { qtyCans: true } }),
+    ctx.db.orderItem.groupBy({ by: ['productId'], where: { order: { status: { in: ['CONFIRMED', 'IN_TRANSIT'] } } }, _sum: { qtyCans: true } }),
     ctx.db.supplierOrderItem.findMany({ where: { supplierOrder: { status: { in: ['ORDERED', 'IN_TRANSIT'] } } } }),
     currentPriceTable(ctx.db),
     cargoPerPackEstimate(ctx.db),
   ]);
-  const demandMap = new Map(demand.map((d) => [d.productId, d._sum.qtyCans ?? 0]));
+  const soldMap = new Map(sold.map((d) => [d.productId, d._sum.qtyCans ?? 0]));
+  const preMap = new Map(preorders.map((d) => [d.productId, d._sum.qtyCans ?? 0]));
   const incomingMap = new Map<number, number>();
   for (const i of incoming) incomingMap.set(i.productId, (incomingMap.get(i.productId) ?? 0) + i.orderedPacks);
 
+  const round1 = (x: number) => Math.round(x * 10) / 10;
   const lines = products.map((p) => {
-    const ordersCans = demandMap.get(p.id) ?? 0;
-    const inStock = levels.get(p.id)!.inStock;
-    const incomingPacks = incomingMap.get(p.id) ?? 0;
-    const ordersPacks = ordersCans / p.packSize;
-    const availablePacks = inStock / p.packSize + incomingPacks;
-    const packs = proposePacks({ ordersPacks, availablePacks, safetyPacks: ctx.settings.safetyStockPacks, minPacks: ctx.settings.supplierMinPacks });
+    const l = levels.get(p.id)!;
+    const avgWeeklyPacks = (soldMap.get(p.id) ?? 0) / p.packSize / 4;
+    const preorderPacks = (preMap.get(p.id) ?? 0) / p.packSize;
+    const warehousePacks = l.warehouse / p.packSize;
+    const carPacks = l.car / p.packSize;
+    const inTransitPacks = incomingMap.get(p.id) ?? 0;
+    const packs = proposePacks({
+      avgWeeklyPacks,
+      coverWeeks: ctx.settings.coverWeeks,
+      preorderPacks,
+      stockPacks: warehousePacks + carPacks,
+      inTransitPacks,
+      minPacks: ctx.settings.supplierMinPacks,
+    });
     const sell = prices.get(`${p.id}:default`)?.perPack ?? 0;
     const cost = packs * (p.buyPricePerPack + lastCargo);
     return {
@@ -71,9 +86,15 @@ export async function buildProposal(ctx: Ctx, coverUntil?: string) {
       flavour: p.flavour,
       name: p.name,
       packSize: p.packSize,
-      ordersPacks: Math.round(ordersPacks * 10) / 10,
-      inStockPacks: Math.round((inStock / p.packSize) * 10) / 10,
-      incomingPacks,
+      avgWeeklyPacks: round1(avgWeeklyPacks),
+      preorderPacks: round1(preorderPacks),
+      warehousePacks: round1(warehousePacks),
+      carPacks: round1(carPacks),
+      inTransitPacks,
+      // kept for older screens
+      ordersPacks: round1(preorderPacks),
+      inStockPacks: round1(warehousePacks + carPacks),
+      incomingPacks: inTransitPacks,
       proposedPacks: packs,
       buyPricePerPack: p.buyPricePerPack,
       sellPerPack: sell,
@@ -86,7 +107,8 @@ export async function buildProposal(ctx: Ctx, coverUntil?: string) {
   return {
     orderDay: ship.orderDay,
     arrivalDate: ship.arrival,
-    coverUntil: until,
+    coverUntil: ship.coverUntil,
+    coverWeeks: ctx.settings.coverWeeks,
     cutoff: ctx.settings.supplierCutoffTime,
     cargoPerPack: lastCargo,
     lines,
