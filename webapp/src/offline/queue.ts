@@ -9,7 +9,8 @@ import { toast } from '../ui/toast';
 
 export interface QueueItem {
   key: string; // idempotency key
-  kind: 'order' | 'visit';
+  kind: 'order' | 'visit' | 'sell' | 'nosale' | 'preorder';
+  path?: string;
   title: string;
   payload: any;
   createdAt: number;
@@ -66,6 +67,11 @@ export function queueVisit(payload: { idempotencyKey: string; shopName: string }
   return put({ key: payload.idempotencyKey, kind: 'visit', title: `Tashrif: ${shopName}`, payload: rest, createdAt: Date.now(), tries: 0 });
 }
 
+/** Any write that must survive weak internet (Sotish, no-sale, pre-order). */
+export function queueRequest(kind: QueueItem['kind'], title: string, path: string, payload: { idempotencyKey: string } & Record<string, unknown>) {
+  return put({ key: payload.idempotencyKey, kind, path, title, payload, createdAt: Date.now(), tries: 0 });
+}
+
 let flushing = false;
 
 /** Sends everything waiting. Stops at the first network error (still offline). */
@@ -77,11 +83,11 @@ export async function flushQueue(): Promise<number> {
     const items = (await listQueue()).sort((a, b) => a.createdAt - b.createdAt);
     for (const item of items) {
       try {
-        const path = item.kind === 'order' ? '/orders' : '/visits';
+        const path = item.path ?? (item.kind === 'order' ? '/orders' : '/visits');
         const r = await api.post(path, item.payload);
         await removeQueued(item.key);
         sent++;
-        if (item.kind === 'order' && r?.confirmError) {
+        if (r?.confirmError) {
           toast(`${item.title}: ${r.confirmError.message}. Qoralama sifatida saqlandi.`, { tone: 'error' });
         }
       } catch (e) {
@@ -95,7 +101,7 @@ export async function flushQueue(): Promise<number> {
     flushing = false;
   }
   if (sent) {
-    invalidate('/orders', '/shops', '/products', '/today', '/visits');
+    invalidate('/orders', '/shops', '/products', '/today', '/visits', '/checklist', '/car');
     toast(`Yuborildi ✅ (${sent})`);
   }
   return sent;

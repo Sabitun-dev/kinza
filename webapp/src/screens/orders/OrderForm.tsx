@@ -397,7 +397,7 @@ function Total({ label, value, bold }: { label: string; value: number; bold?: bo
 }
 
 /** Per-flavour details: loose cans, own price (within limits), bonus. */
-function LineSheet({
+export function LineSheet({
   p,
   main,
   bonus,

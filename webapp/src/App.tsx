@@ -188,6 +188,7 @@ function PlusSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const nav = useNav();
   const { user } = useSession();
   const items: { icon: IconName; label: string; screen: string; roles: string[] }[] = [
+    { icon: 'cash', label: 'Sotish', screen: 'sell-pick', roles: ['OWNER', 'AGENT'] },
     { icon: 'orders', label: t('plus.order'), screen: 'order-new', roles: ['OWNER', 'AGENT'] },
     { icon: 'shops', label: t('plus.shop'), screen: 'shop-edit', roles: ['OWNER', 'AGENT'] },
     { icon: 'wallet', label: t('plus.payment'), screen: 'payment-new', roles: ['OWNER', 'AGENT', 'DRIVER'] },

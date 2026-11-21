@@ -107,7 +107,7 @@ export function enforceAgentLimits(ctx: Ctx, built: ReturnType<typeof buildLines
   if (err) throw new AppError(err, 400, 'price_limit');
 }
 
-async function loadProducts(tx: Tx, ids: number[]) {
+export async function loadProducts(tx: Tx, ids: number[]) {
   const rows = await tx.product.findMany({ where: { id: { in: ids } } });
   return new Map(rows.map((p) => [p.id, p]));
 }
@@ -434,7 +434,7 @@ export async function consumeForItems(tx: Tx, ctx: Ctx, order: { id: number; sho
   return costTotal;
 }
 
-async function makeWaybill(tx: Tx, ctx: Ctx, orderId: number, number: string, revision: number, revisionReason: string | null, paidNow: number) {
+export async function makeWaybill(tx: Tx, ctx: Ctx, orderId: number, number: string, revision: number, revisionReason: string | null, paidNow: number) {
   const o = await tx.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: { include: { product: true }, orderBy: { sortOrder: 'asc' } }, shop: true } });
   const after = (await shopBalances(tx, localDate(ctx.now()), [o.shopId])).get(o.shopId)!.balance;
   const bytes = await orderDocument({

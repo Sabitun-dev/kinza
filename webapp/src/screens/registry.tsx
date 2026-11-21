@@ -25,6 +25,8 @@ import { RemindersScreen } from './more/Reminders';
 import { ChecklistHome } from './today/Checklist';
 import { DayCloseScreen, CoverageScreen, HolidaysScreen } from './today/DayClose';
 import { CarScreen, CarLoadScreen } from './stock/Car';
+import { SellScreen } from './sell/Sell';
+import { SellPick } from './sell/SellPick';
 import { DashboardScreen, ExpensesScreen, ExpenseEdit, ExportsScreen, CommissionScreen } from './reports/Reports';
 
 function Soon() {
@@ -42,7 +44,8 @@ export const SCREENS: Record<string, ComponentType<any>> = {
   'day-close': DayCloseScreen,
   coverage: CoverageScreen,
   holidays: HolidaysScreen,
-  sell: OrderForm,
+  sell: SellScreen,
+  'sell-pick': SellPick,
   drive: Soon,
   car: CarScreen,
   'car-load': CarLoadScreen,

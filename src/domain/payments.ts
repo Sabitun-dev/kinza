@@ -8,7 +8,7 @@ import { isOwner } from '../core/permissions.ts';
 import type { PayMethod, ReturnCondition } from '../generated/prisma/enums.ts';
 import { outstanding, reallocateShop, shopBalances } from './ledger.ts';
 import { pricesForShop } from './pricing.ts';
-import { averageCost, movement } from './stock.ts';
+import { averageCost, movement, WAREHOUSE, type Place } from './stock.ts';
 import { bizInfo, esc, notifyOwners, sendDocumentToChat, shopParty, storeDocument } from './docs.ts';
 import { receiptDocument, reconciliationDocument, returnDocument } from '../pdf/documents.ts';
 import { daysBetween, localDate, localDateTime, startOfLocalDay, addDays } from '../shared/dates.ts';
@@ -194,11 +194,12 @@ export interface ReturnInput {
   lines: { productId: number; qtyCans: number; condition: ReturnCondition; pricePerCan?: number }[];
 }
 
-export async function createReturn(ctx: Ctx, input: ReturnInput) {
+/** A return inside the caller's transaction. Sellable cans go back to `where` (warehouse or car). */
+export async function createReturnInTx(tx: Tx, ctx: Ctx, input: ReturnInput, where: Place = WAREHOUSE) {
   if (!input.lines.length) throw bad("Kamida bitta mahsulot qo'shing");
   const today = localDate(ctx.now());
   const date = input.date ?? today;
-  const result = await inTx(ctx.db, async (tx: Tx) => {
+  {
     const shop = await tx.shop.findUniqueOrThrow({ where: { id: input.shopId } });
     const order = input.orderId
       ? await tx.order.findFirst({ where: { id: input.orderId, shopId: input.shopId, status: 'DELIVERED' }, include: { items: true } })
@@ -245,8 +246,8 @@ export async function createReturn(ctx: Ctx, input: ReturnInput) {
     for (const l of lines) {
       if (l.condition === 'SELLABLE') {
         const cost = await averageCost(tx, l.productId);
-        const batch = await tx.stockBatch.create({ data: { productId: l.productId, landedCostPerCan: cost, receivedCans: l.qtyCans, remainingCans: l.qtyCans } });
-        await movement(tx, { productId: l.productId, batchId: batch.id, type: 'RETURN_IN', qtyCans: l.qtyCans, costPerCan: cost, returnId: ret.id, shopId: input.shopId, orderId: order?.id, userId: ctx.user.id, reason: input.reason });
+        const batch = await tx.stockBatch.create({ data: { productId: l.productId, landedCostPerCan: cost, receivedCans: l.qtyCans, remainingCans: l.qtyCans, place: where.place, carUserId: where.carUserId ?? null } });
+        await movement(tx, { productId: l.productId, batchId: batch.id, type: 'RETURN_IN', qtyCans: l.qtyCans, costPerCan: cost, place: where.place, carUserId: where.carUserId ?? null, returnId: ret.id, shopId: input.shopId, orderId: order?.id, userId: ctx.user.id, reason: input.reason });
       } else {
         await movement(tx, { productId: l.productId, type: 'RETURN_IN', pool: 'DAMAGED', qtyCans: l.qtyCans, returnId: ret.id, shopId: input.shopId, orderId: order?.id, userId: ctx.user.id, reason: `${t(`returnCondition.${l.condition}` as never)}${input.reason ? ': ' + input.reason : ''}` });
       }
@@ -267,7 +268,11 @@ export async function createReturn(ctx: Ctx, input: ReturnInput) {
     const doc = await storeDocument(tx, ctx, { kind: 'RETURN_ACT', bytes, fileName: `Qaytarish-${number}.pdf`, number, returnId: ret.id, shopId: input.shopId, orderId: order?.id });
     await audit(tx, ctx.user.id, 'return.create', 'return', ret.id, undefined, { number, shopId: input.shopId, total, lines: input.lines });
     return { ret, docId: doc.id, shopName: shop.name, balance };
-  });
+  }
+}
+
+export async function createReturn(ctx: Ctx, input: ReturnInput) {
+  const result = await inTx(ctx.db, (tx) => createReturnInTx(tx, ctx, input));
   await sendDocumentToChat(ctx, result.docId, ctx.user.telegramId, `↩️ ${t('docKind.RETURN_ACT')} ${result.ret.number}\n<b>${esc(result.shopName)}</b> · ${formatMoney(result.ret.total)}`);
   if (!isOwner(ctx.user)) await notifyOwners(ctx, `👤 ${esc(ctx.user.name)}: qaytarish ${result.ret.number}, ${esc(result.shopName)} — ${formatMoney(result.ret.total)}`);
   return { id: result.ret.id, number: result.ret.number, total: result.ret.total, balance: result.balance };

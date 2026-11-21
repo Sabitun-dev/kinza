@@ -21,8 +21,18 @@ export function getDb(): PrismaClient {
   return client;
 }
 
+// Transaction clients opened by inTx. (A Prisma transaction client also has a $transaction
+// method, so we cannot tell them apart by shape.)
+const openTx = new WeakSet<object>();
+
 /** Runs fn in a transaction, or directly inside an existing one. */
 export async function inTx<T>(db: DbOrTx, fn: (tx: Tx) => Promise<T>): Promise<T> {
-  if ('$transaction' in db) return (db as PrismaClient).$transaction(fn, { timeout: 20_000, maxWait: 10_000 });
-  return fn(db as Tx);
+  if (openTx.has(db) || !('$transaction' in db)) return fn(db as Tx);
+  return (db as PrismaClient).$transaction(
+    (tx) => {
+      openTx.add(tx);
+      return fn(tx);
+    },
+    { timeout: 20_000, maxWait: 10_000 },
+  );
 }
