@@ -54,7 +54,7 @@ export async function createBot(deps: Deps) {
     if (user?.role !== 'OWNER') return;
     await ctx.reply(t('bot.backupStarted'));
     const { runBackup } = await import('../backup/backup.ts');
-    await runBackup(deps, { sendTo: user.telegramId, reason: 'manual' });
+    await runBackup(deps, { sendTo: [user.telegramId], reason: 'manual' });
   });
 
   // Phone numbers are trusted only from a contact the user shared about themselves.

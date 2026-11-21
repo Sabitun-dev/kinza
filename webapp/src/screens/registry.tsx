@@ -21,6 +21,7 @@ import { DebtorsScreen } from './money/Debtors';
 import { PaymentsScreen, CashScreen, ReturnsScreen, ReturnNew, ReconciliationScreen } from './money/MoneyScreens';
 import { SupplierProposal, SupplierOrders, SupplierOrderDetail, SupplierReceive } from './stock/Supplier';
 import { StockCountScreen, StockAdjustScreen, BatchesScreen } from './stock/StockOps';
+import { RemindersScreen } from './more/Reminders';
 
 function Soon() {
   return (
@@ -65,5 +66,6 @@ export const SCREENS: Record<string, ComponentType<any>> = {
   'stock-count': StockCountScreen,
   'stock-adjust': StockAdjustScreen,
   batches: BatchesScreen,
+  reminders: RemindersScreen,
   'not-found': Soon,
 };

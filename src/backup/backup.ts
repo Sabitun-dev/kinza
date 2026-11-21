@@ -80,7 +80,7 @@ export async function importDatabase(db: PrismaClient, gz: Uint8Array) {
 }
 
 /** Daily backup to Netlify Blobs, keeping the last N days. Optionally sends the file to a chat. */
-export async function runBackup(deps: Deps, opts: { sendTo?: number; reason: 'daily' | 'manual' }) {
+export async function runBackup(deps: Deps, opts: { sendTo?: number[]; reason: 'daily' | 'manual' }) {
   const settings = await getSettings(deps.db);
   const now = deps.now();
   const day = localDate(now);
@@ -96,9 +96,9 @@ export async function runBackup(deps: Deps, opts: { sendTo?: number; reason: 'da
     if (m && m[1] < oldest) await deps.blobs.delete(k);
   }
 
-  if (opts.sendTo) {
+  for (const chat of opts.sendTo ?? []) {
     await deps.notifier.sendDocument(
-      opts.sendTo,
+      chat,
       { name: key.replace('backups/', ''), data },
       `💾 Zaxira nusxa: ${day} (${Math.round(data.byteLength / 1024)} KB)`,
     );

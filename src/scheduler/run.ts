@@ -3,6 +3,9 @@ import { getSettings, type Settings } from '../core/settings.ts';
 import { localDate, localTime, localParts } from '../shared/dates.ts';
 import { runBackup } from '../backup/backup.ts';
 import { scheduledJobs } from './jobs.ts';
+import { claimOnce } from './once.ts';
+
+export { claimOnce };
 
 export interface Job {
   name: string;
@@ -13,16 +16,6 @@ export interface Job {
 
 const SYSTEM_USER = 0;
 
-/** Marks a once-per-day event. Returns false if it was already done today. */
-export async function claimOnce(deps: Deps, userId: number, kind: string, refKey: string, day: string) {
-  try {
-    await deps.db.notificationSent.create({ data: { userId, kind, refKey, day } });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export const backupJob: Job = {
   name: 'backup',
   at: (s) => s.backupTime,
@@ -30,7 +23,7 @@ export const backupJob: Job = {
     // Every Sunday the backup is also sent to the owners' chat.
     const sunday = localParts(deps.now()).weekday === 7;
     const owners = sunday ? await deps.db.user.findMany({ where: { role: 'OWNER', active: true } }) : [];
-    const first = await runBackup(deps, { reason: 'daily', sendTo: owners[0] ? Number(owners[0].telegramId) : undefined });
+    const first = await runBackup(deps, { reason: 'daily', sendTo: owners.map((o) => Number(o.telegramId)) });
     return `backup ${first.key} ${day}`;
   },
 };

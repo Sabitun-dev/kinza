@@ -53,6 +53,9 @@ const COST_KEYS = new Set([
   'stockValue',
 ]);
 
+/** Any field name that mentions cost, profit, buying price or landed cost is owner-only. */
+const COST_PATTERN = /cost|profit|buyPrice|landed|margin|expense|supplierBalance|invoice/i;
+
 // Selling-price fields a driver does not need (they only see the amount to collect).
 const PRICE_KEYS = new Set([
   'pricePerPack',
@@ -77,7 +80,7 @@ export function sanitizeFor(role: Role, data: unknown): unknown {
     if (v && typeof v === 'object' && !(v instanceof Date)) {
       const out: Record<string, unknown> = {};
       for (const [k, x] of Object.entries(v)) {
-        if (COST_KEYS.has(k)) continue;
+        if (COST_KEYS.has(k) || COST_PATTERN.test(k)) continue;
         if (role === 'DRIVER' && PRICE_KEYS.has(k)) continue;
         out[k] = strip(x);
       }
