@@ -75,6 +75,33 @@ export function invalidate(...prefixes: string[]) {
   emit();
 }
 
+// Screens needed in a shop with weak internet keep their last answer on the phone.
+const PERSIST = ['/sell-form', '/checklist', '/car'];
+const persistKey = (path: string) => 'apicache:' + path;
+function remember(path: string, data: unknown) {
+  if (!PERSIST.some((p) => path.startsWith(p))) return;
+  try {
+    localStorage.setItem(persistKey(path), JSON.stringify(data));
+  } catch {
+    /* storage full or blocked */
+  }
+}
+function recall(path: string): unknown {
+  try {
+    const v = localStorage.getItem(persistKey(path));
+    return v ? JSON.parse(v) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Loads a GET into the phone's cache (used to prepare driving mode for offline use). */
+export async function prefetch(path: string) {
+  const data = await api.get(path);
+  cache.set(path, { data, at: Date.now() });
+  remember(path, data);
+}
+
 function load(path: string) {
   const e = cache.get(path) ?? { at: 0 };
   if (e.promise) return e.promise;
@@ -82,9 +109,11 @@ function load(path: string) {
     .get(path)
     .then((data) => {
       cache.set(path, { data, at: Date.now() });
+      remember(path, data);
     })
     .catch((error: ApiError) => {
-      cache.set(path, { data: e.data, error, at: Date.now() });
+      const saved = error.code === 'offline' ? (e.data ?? recall(path)) : e.data;
+      cache.set(path, { data: saved, error: saved !== undefined && error.code === 'offline' ? undefined : error, at: Date.now() });
     })
     .finally(emit);
   cache.set(path, { ...e, promise: p });

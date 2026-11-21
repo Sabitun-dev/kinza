@@ -12,6 +12,7 @@ import { dayLabel, getPosition, localDate, uid } from '../../util';
 import { ProductPhoto } from '../stock/StockTab';
 import { LineSheet, type Line } from '../orders/OrderForm';
 import { queueRequest } from '../../offline/queue';
+import { markShopDone } from '../route/Drive';
 import { formatMoney } from '@shared/money';
 import { formatQty, priceFor, splitCans } from '@shared/qty';
 
@@ -93,6 +94,7 @@ export function SellScreen({ shopId, orderId }: { shopId: number; orderId?: numb
   });
 
   const done = (msg: string) => {
+    markShopDone(shopId);
     haptic.success();
     toast(msg);
     invalidate('/checklist', '/car', '/orders', '/shops', '/today', '/products', '/debtors');

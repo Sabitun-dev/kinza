@@ -10,6 +10,7 @@ import { formatMoney } from '../shared/money.ts';
 import type { Job } from './run.ts';
 import { claimOnce } from './once.ts';
 import { autoCarryOver, ensureChecklist } from '../checklist/checklist.ts';
+import { cleanupGps } from '../routing/drive.ts';
 
 type U = { id: number; telegramId: bigint; role: 'OWNER' | 'AGENT' | 'DRIVER'; name: string };
 
@@ -165,4 +166,11 @@ const carryOver: Job = {
   run: async (deps, s, day) => `${await autoCarryOver(deps.db, s, day)} carried`,
 };
 
-export const scheduledJobs: Job[] = [checklists, morning, alerts, cutoff, evening, carryOver];
+/** GPS points are kept 30 days. */
+const gpsCleanup: Job = {
+  name: 'gpscleanup',
+  at: (s) => s.backupTime,
+  run: async (deps) => String(await cleanupGps(deps.db, deps.now())),
+};
+
+export const scheduledJobs: Job[] = [checklists, morning, alerts, cutoff, evening, carryOver, gpsCleanup];

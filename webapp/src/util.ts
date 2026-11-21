@@ -77,3 +77,68 @@ export function uid(): string {
   if (crypto.randomUUID) return crypto.randomUUID();
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
+
+/**
+ * Location for driving mode: Telegram's LocationManager when available (Bot API 8.0+),
+ * otherwise the browser's geolocation. Only called while driving mode is open.
+ */
+export function readLocation(): Promise<{ lat: number; lng: number; accuracy: number } | null> {
+  const lm = (window.Telegram?.WebApp as any)?.LocationManager;
+  if (lm && typeof lm.getLocation === 'function') {
+    return new Promise((resolve) => {
+      const get = () =>
+        lm.getLocation((d: any) => (d ? resolve({ lat: d.latitude, lng: d.longitude, accuracy: d.horizontal_accuracy ?? 50 }) : getPosition(8000).then(resolve)));
+      try {
+        if (!lm.isInited) lm.init(() => (lm.isLocationAvailable ? get() : getPosition(8000).then(resolve)));
+        else if (lm.isLocationAvailable) get();
+        else getPosition(8000).then(resolve);
+      } catch {
+        getPosition(8000).then(resolve);
+      }
+    });
+  }
+  return getPosition(8000);
+}
+
+export function distanceM(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const R = 6_371_000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const h = Math.sin(toRad(b.lat - a.lat) / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(toRad(b.lng - a.lng) / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+export type NavApp = 'yandexnavi' | 'yandex' | 'google';
+
+function store(key: string, value?: string) {
+  try {
+    if (value === undefined) return localStorage.getItem(key);
+    localStorage.setItem(key, value);
+  } catch {
+    /* storage blocked */
+  }
+  return null;
+}
+
+export const navChoice = {
+  get: () => (store('navApp') as NavApp | null) ?? null,
+  set: (v: NavApp) => store('navApp', v),
+};
+
+/**
+ * Opens turn-by-turn navigation to a shop. Yandex Navigator is tried through its app link; if the
+ * app does not open within ~1.5 s, the Yandex Maps web route is opened instead.
+ */
+export function openNavigation(lat: number, lng: number, app: NavApp) {
+  haptic.impact();
+  if (app === 'google') return openLink(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`);
+  const web = `https://yandex.uz/maps/?rtext=~${lat},${lng}&rtt=auto`;
+  if (app === 'yandex') return openLink(web);
+  let left = false;
+  const onHide = () => (left = true);
+  document.addEventListener('visibilitychange', onHide, { once: true });
+  window.location.href = `yandexnavi://build_route_on_map?lat_to=${lat}&lon_to=${lng}`;
+  setTimeout(() => {
+    document.removeEventListener('visibilitychange', onHide);
+    if (!left && !document.hidden) openLink(web);
+  }, 1500);
+}

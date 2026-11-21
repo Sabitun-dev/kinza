@@ -6,6 +6,7 @@ import { inTx } from '../../core/db.ts';
 import { closeDay, coverage, ensureChecklist, isDayOff, markNoVisitOutcome, moveItem, nextWorkingDay, shopsWithProblems } from '../../checklist/checklist.ts';
 import { checklistView } from '../../checklist/view.ts';
 import { planRoute } from '../../routing/route.ts';
+import { driveBundle, finishDrive, recordGps, startDrive } from '../../routing/drive.ts';
 import { bizInfo, sendDocumentToChat, storeDocument } from '../../domain/docs.ts';
 import { checklistDocument } from '../../pdf/documents.ts';
 import { addDays, fromDbDate, localDate, toDbDate, weekday } from '../../shared/dates.ts';
@@ -103,6 +104,23 @@ export function checklistRoutes(app: App) {
     );
     return ok(c, await planRoute(ctx, idParam(c), input));
   });
+
+  // ── Driving mode ──
+  app.post('/api/checklist/:id/drive/start', async (c) => {
+    const ctx = c.get('ctx');
+    const input = parse(z.object({ start: pos }), await body(c));
+    return ok(c, await startDrive(ctx, idParam(c), input.start));
+  });
+
+  app.get('/api/checklist/:id/drive', async (c) => ok(c, await driveBundle(c.get('ctx'), idParam(c))));
+
+  app.post('/api/checklist/:id/gps', async (c) => {
+    const ctx = c.get('ctx');
+    const input = parse(z.object({ points: z.array(z.object({ lat: z.number(), lng: z.number(), accuracy: z.number().nullable().optional(), at: z.string() })).max(500) }), await body(c));
+    return ok(c, await recordGps(ctx, idParam(c), input.points));
+  });
+
+  app.post('/api/checklist/:id/drive/finish', async (c) => ok(c, await finishDrive(c.get('ctx'), idParam(c))));
 
   // ── Days off ──
   app.get('/api/holidays', async (c) => {

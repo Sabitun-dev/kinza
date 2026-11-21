@@ -11,6 +11,8 @@ import { Sheet } from './ui/sheet';
 import { Intro } from './screens/Intro';
 import { SCREENS } from './screens/registry';
 import { OfflineBanner } from './offline/OfflineBanner';
+import { activeDriveDay } from './screens/route/Drive';
+import { localDate } from './util';
 import { t } from '@shared/i18n';
 
 type Boot = { state: 'loading' } | { state: 'error'; error: ApiError } | { state: 'noaccess'; id?: number } | { state: 'ready'; session: Omit<Session, 'reload'> };
@@ -90,6 +92,8 @@ function useDeepLink() {
   const nav = useNav();
   useEffect(() => {
     const sp = startParam();
+    // Back into driving mode where I was, if a route is running today
+    if (!sp && activeDriveDay() === localDate()) return nav.open('today', 'drive');
     if (!sp || sp.startsWith('inv_')) return;
     const [kind, raw] = sp.split('_');
     const id = Number(raw);
